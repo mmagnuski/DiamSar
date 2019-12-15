@@ -6,6 +6,7 @@ from borsar.utils import find_range, valid_windows
 from borsar.channels import select_channels, get_ch_names, find_channels
 from borsar.freq import compute_rest_psd
 
+from . import pth
 from .utils import progressbar as progbar
 
 
@@ -63,8 +64,6 @@ def format_psds(psds, freq, freq_range=(8, 13), average_freq=False,
         Channel names.
     '''
 
-    from DiamSar import paths
-
     has_subjects = psds.ndim == 3
     if freq_range is not None:
         rng = find_range(freq, freq_range)
@@ -111,7 +110,7 @@ def format_psds(psds, freq, freq_range=(8, 13), average_freq=False,
             # make sure the vertices in left and right hemisphsers match
             # we use a special version of fsaverage brain model - one that
             # is symmetrical
-            src_sym = paths.get_data('src_sym')
+            src_sym = pth.paths.get_data('src_sym')
             psds = morph_hemi(
                 psds, src, morph='lh2rh', src_sym=src_sym,
                 subjects_dir=subjects_dir, has_subjects=has_subjects)
@@ -193,13 +192,13 @@ def compute_all_rest(study='C', event_id=None, tmin=1., tmax=60., winlen=2.,
 
     FIXME - describe arguments !
     '''
-    from DiamSar import paths, read_raw
+    from . import read_raw
 
     if event_id is not None:
         assert event_id in [10, 11]
 
     if save_dir is None:
-        save_dir = op.join(paths.get_path('main', study='C'), 'analysis', 'psd')
+        save_dir = op.join(pth.paths.get_path('main', study='C'), 'analysis', 'psd')
 
     # construct file name based on analysis parameters
     eyes = ('closed' if not study == 'C'
@@ -210,7 +209,7 @@ def compute_all_rest(study='C', event_id=None, tmin=1., tmax=60., winlen=2.,
     full_fname = op.join(save_dir, fname)
 
     all_psds = list()
-    subj_ids = paths.get_subject_ids(study=study, task='rest')
+    subj_ids = pth.get_subject_ids(study=study, task='rest')
     pbar = progbar(progressbar, total=len(subj_ids))
 
     for idx, subj_id in enumerate(subj_ids):
@@ -243,9 +242,30 @@ def compute_all_rest(study='C', event_id=None, tmin=1., tmax=60., winlen=2.,
 # - [ ] why make_csd_rest_old did not return NaNs for the subject that
 #       has NaNs both in channel data and make_csd_morlet_raw
 # - [x] compare csd's between cnt and raw versions
-def make_csd_rest_old(raw, frequencies, events=None, event_id=None, tmin=None,
+def make_csd_rest_approx(raw, frequencies, events=None, event_id=None, tmin=None,
                       tmax=None, n_jobs=1, n_cycles=7.):
-    '''FIXME - needs docs!'''
+    '''Approximate CSD for continuous signals by segmenting and computing CSD
+    on segments.
+
+    Parameters
+    ----------
+    raw : mne Raw object
+        Instance of Raw object to use in CSD computation.
+    frequencies : list of float
+        List of frequencies to compute CSD for.
+    events :
+        ...
+    event_id :
+        ...
+    tmin :
+        ...
+    tmax :
+        ...
+    n_jobs :
+        ...
+    n_cycles :
+        ...
+    '''
     from mne.epochs import _segment_raw
 
     events, tmin, tmax = _deal_with_csd_inputs(tmin, tmax, events, event_id)
@@ -273,7 +293,27 @@ def make_csd_morlet_raw(raw, freqs, events=None, event_id=None, tmin=0.,
                         tmax=10., n_cycles=3., decim=1):
     '''Calculate cross-spectral density on raw data.
 
-    FIXME - could use picks...'''
+    FIXME - could use picks...
+
+    Parameters
+    ----------
+    raw : mne Raw object
+        Instance of Raw object to use in CSD computation.
+    frequencies : list of float
+        List of frequencies to compute CSD for.
+    events :
+        ...
+    event_id :
+        ...
+    tmin :
+        ...
+    tmax :
+        ...
+    n_jobs :
+        ...
+    n_cycles :
+        ...
+    '''
     from mne.time_frequency.csd import CrossSpectralDensity
 
     sfreq = raw.info['sfreq']
@@ -291,15 +331,17 @@ def make_csd_morlet_raw(raw, freqs, events=None, event_id=None, tmin=0.,
         tmin_ts = events[event_idx, 0] + int(round(tmin * sfreq))
         tmax_ts = tmin_ts + int(round(tmax * sfreq))
 
-        data = raw._data[:, tmin_ts-add_rim:tmax_ts][np.newaxis, ...]
+        # FIXME - make sure tfr here is complex
+        data = raw._data[:, tmin_ts-add_rim:tmax_ts+add_rim][np.newaxis, ...]
         tfr = mne.time_frequency.tfr_array_morlet(data, sfreq, freqs,
                                                   n_cycles=n_cycles, decim=decim)
 
         n_times = tfr.shape[-1]
         tfr = tfr[0, ..., add_rim:n_times-add_rim]
 
-        wgt = _apply_annot_to_tfr(raw.annotations, tfr, sfreq / decim, freqs, n_cycles,
-                                  orig_sample=tmin_ts)
+        # FIXME - check that wights make sense
+        wgt = _apply_annot_to_tfr(raw.annotations, tfr, sfreq / decim, freqs,
+                                  n_cycles, orig_sample=tmin_ts)
         reduction = np.mean if wgt == 0. else np.nanmean
         all_weights.append(wgt)
 

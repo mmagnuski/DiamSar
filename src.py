@@ -1,7 +1,7 @@
 import numpy as np
 import mne
 
-from .paths import paths
+from . import pth
 
 
 def find_label_vertices(src, labels, label_names=None, hemi='both'):
@@ -197,7 +197,7 @@ def morph_hemi(data, src, morph='rh2lh', subjects_dir=None, has_subjects=True,
 
     elif method == 'sym':
         if src_sym is None:
-            src_sym = paths.load_data('src_sym')
+            src_sym = pth.paths.load_data('src_sym')
         vertices = _get_vertices(src_sym)
 
         fsavg2sym = mne.compute_source_morph(
