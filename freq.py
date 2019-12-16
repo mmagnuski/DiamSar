@@ -415,3 +415,33 @@ def _deal_with_csd_inputs(tmin, tmax, events, event_id):
     events = events[events_of_interest]
 
     return events, tmin, tmax
+
+
+
+def get_psds(study='C', space='avg', contrast='cvsd', selection='frontal'):
+
+    bdi = ds.pth.paths.get_data('bdi', study=study)
+
+    psds, freqs, ch_names, subj_id = ds.pth.paths.get_data(
+        'psd', study=study, space=space)
+
+    info = ds.pth.paths.get_data('info', study=study)
+
+    psd, this_freq, ch_names = ds.freq.format_psds(
+        psds, freqs, info=info, selection=selection, average_freq=True)
+
+    chs = ds.freq.select_channels(info, selection)
+
+    if selection == 'frontal':
+
+        info_sel = mne.pick_info(info=info, sel=chs)
+
+    else:
+        
+        info_sel = mne.pick_info(info=info, sel=chs['right'])
+
+    psd_high = psd[grp['high']]
+    psd_low = psd[grp['low']]
+
+
+    return psd_high, psd_low, info_sel
