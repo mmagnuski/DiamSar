@@ -417,31 +417,35 @@ def _deal_with_csd_inputs(tmin, tmax, events, event_id):
     return events, tmin, tmax
 
 
-
 def get_psds(study='C', space='avg', contrast='cvsd', selection='frontal'):
+    ''' Selecting psds for selected channels for control versus diagnosed contrast
+    Returning psd values for high and low BDI groups
+    '''
+    bdi = pth.paths.get_data('bdi', study=study)
 
-    bdi = ds.pth.paths.get_data('bdi', study=study)
-
-    psds, freqs, ch_names, subj_id = ds.pth.paths.get_data(
+    psds, freqs, ch_names, subj_id = pth.paths.get_data(
         'psd', study=study, space=space)
 
-    info = ds.pth.paths.get_data('info', study=study)
+    info = pth.paths.get_data('info', study=study)
+
+    grp = ds.utils.group_bdi(subj_id, bdi, method=contrast)
 
     psd, this_freq, ch_names = ds.freq.format_psds(
         psds, freqs, info=info, selection=selection, average_freq=True)
 
-    chs = ds.freq.select_channels(info, selection)
+    chs = freq.select_channels(info, selection)
 
-    if selection == 'frontal':
-
+    if 'asy' in selection:
+        info_sel = mne.pick_info(info=info, sel=chs['right'])
+    else:
         info_sel = mne.pick_info(info=info, sel=chs)
 
+    if 'reg' in contrast:
+        # return psd, info, bdi
+        psd_sel = psd[grp['selection']]
+        bdi_sel = grp['bdi']
+        return psd_sel, info_sel, bdi_sel
     else:
-        
-        info_sel = mne.pick_info(info=info, sel=chs['right'])
-
-    psd_high = psd[grp['high']]
-    psd_low = psd[grp['low']]
-
-
-    return psd_high, psd_low, info_sel
+        psd_high = psd[grp['high']]
+        psd_low = psd[grp['low']]
+        return psd_high, psd_low, info_sel
