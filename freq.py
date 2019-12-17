@@ -418,8 +418,7 @@ def _deal_with_csd_inputs(tmin, tmax, events, event_id):
 
 
 def get_psds(study='C', space='avg', contrast='cvsd', selection='frontal'):
-    ''' Selecting psds for selected channels for control versus diagnosed contrast
-    Returning psd values for high and low BDI groups
+    ''' Selecting psds for selected channels for defined contrast
     '''
     bdi = pth.paths.get_data('bdi', study=study)
 
