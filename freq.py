@@ -421,17 +421,13 @@ def get_psds(study='C', space='avg', contrast='cvsd', selection='frontal'):
     ''' Selecting psds for selected channels for defined contrast
     '''
     bdi = pth.paths.get_data('bdi', study=study)
-
     psds, freqs, ch_names, subj_id = pth.paths.get_data(
         'psd', study=study, space=space)
-
     info = pth.paths.get_data('info', study=study)
 
     grp = ds.utils.group_bdi(subj_id, bdi, method=contrast)
-
     psd, this_freq, ch_names = ds.freq.format_psds(
         psds, freqs, info=info, selection=selection, average_freq=True)
-
     chs = freq.select_channels(info, selection)
 
     if 'asy' in selection:
