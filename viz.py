@@ -113,3 +113,15 @@ def plot_grid_cluster(stats_clst, contrast, vlim=3):
                  transform=fig.transFigure, fontsize=21, rotation=90)
 
     return fig
+
+
+def plot_sel_topo(psd_avg, info, vmax, selection='frontal'):
+    '''Creating Topo object for defined selection'''
+    if 'asy' in selection:
+        tp = Topo(psd_avg, info=info, cmap='RdBu_r',
+                  vmin=-vmax, vmax=vmax, extrapolate='head',
+                  outlines='skirt')
+    else:
+        tp = Topo(psd_avg - psd_avg.min(), info=info, cmap='Reds',
+                  extrapolate='head', outlines='skirt')
+    return tp
