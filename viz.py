@@ -115,13 +115,53 @@ def plot_grid_cluster(stats_clst, contrast, vlim=3):
     return fig
 
 
-def plot_sel_topo(psd_avg, info, vmax, selection='frontal'):
-    '''Creating Topo object for defined selection'''
-    if 'asy' in selection:
-        tp = Topo(psd_avg, info=info, cmap='RdBu_r',
-                  vmin=-vmax, vmax=vmax, extrapolate='head',
-                  outlines='skirt')
-    else:
-        tp = Topo(psd_avg - psd_avg.min(), info=info, cmap='Reds',
-                  extrapolate='head', outlines='skirt')
-    return tp
+def plot_multi_topo(psd_avg_high_fr, psd_avg_low_fr, psd_avg_high_asy, psd_avg_low_asy,
+                    info_sel_fr, info_sel_asy, vmax_fr, vmin_fr, vmax_asy):
+    '''Creating figure for multiple psds'''
+    fig, axs = plt.subplots(nrows=2, ncols=2, figsize=(8, 8),
+                       gridspec_kw=dict(height_ratios=[0.5, 0.5], hspace=0.05, wspace=0.05,
+                                        bottom=0.05, top=0.9, left=0.05, right=0.7))
+    cax1 = fig.add_axes([0.75, 0.565, 0.05, 0.3])
+    cax2 = fig.add_axes([0.75, 0.1, 0.05, 0.3])
+
+    tp_low_fr = Topo(psd_avg_low_fr, info=info_sel_fr, cmap='Reds',
+          vmin=vmin_fr, vmax=vmax_fr, extrapolate='head',
+         outlines = 'skirt', axes = axs[0,0], border = 'mean')
+    tp_high_fr = Topo(psd_avg_high_fr, info=info_sel_fr, cmap='Reds',
+          vmin=vmin_fr, vmax=vmax_fr, extrapolate='head',
+         outlines = 'skirt', axes = axs[0,1], border = 'mean')
+    tp_low_asy = Topo(psd_avg_low_asy, info=info_sel_asy, cmap='RdBu_r',
+          vmin=-vmax_asy, vmax=vmax_asy, extrapolate='head',
+         outlines = 'skirt', axes = axs[1,0], border = 'mean')
+    tp_high_asy = Topo(psd_avg_high_asy, info=info_sel_asy, cmap='RdBu_r',
+          vmin=-vmax_asy, vmax=vmax_asy, extrapolate='head',
+         outlines = 'skirt', axes = axs[1,1], border = 'mean')
+    for tp in [tp_low_fr, tp_high_fr, tp_low_asy, tp_high_asy]:
+        tp.solid_lines()
+
+    cmap1 = mpl.cm.get_cmap('Reds')
+    norm1 = mpl.colors.Normalize(vmin=-28, vmax=-26)
+    cb1 = mpl.colorbar.ColorbarBase(cax1, cmap=cmap1,
+                                norm=norm1,
+                                orientation='vertical')
+    cmap2 = mpl.cm.get_cmap('RdBu_r')
+    norm2 = mpl.colors.Normalize(vmin=-0.13, vmax=0.13)
+    cb2 = mpl.colorbar.ColorbarBase(cax2, cmap=cmap2,
+                                norm=norm2,
+                                orientation='vertical')
+
+    cax1.set_ylabel('log(alpha power)')
+    cax2.set_ylabel('alpha power')
+    cax1.set_yticks([0., 0.25,  0.5 ,  0.75 , 1.   ])
+    cax1.set_yticklabels([-28, -27.5, -27, -26.5, -26])
+    axs[0, 0].set_title('group')
+    axs[0, 0].set_ylabel('frontal')
+    axs[1, 0].set_ylabel('asy')
+    axs[0, 1].set_title('group')
+    plt.locator_params(nbins=5)
+    plt.rc('axes', labelsize=22)
+    plt.rc('axes', titlesize=22)
+    plt.rc('ytick', labelsize=16)
+    plt.rc('legend', fontsize=16)
+
+    return fig
