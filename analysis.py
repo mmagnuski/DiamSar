@@ -281,7 +281,7 @@ def summarize_stats(split=True, reduce_columns=True, stat_dir='stats'):
     n_stat = len(stat_files)
 
     # first, create an empty dataframe
-    stat_params = ['study', 'contrast', 'N_low', 'N_high', 'N_all', 'space',
+    stat_params = ['study', 'contrast', 'space', 'N_low', 'N_high', 'N_all',
                    'eyes', 'selection', 'freq_range', 'avg_freq', 'transform',
                    'div_by_sum']
     stat_summary = ['min t', 'max t', 'n clusters', 'min cluster p',
@@ -374,7 +374,9 @@ def list_analyses(study=list('ABC'), contrast=['cvsc', 'cvsd', 'creg', 'cdreg',
     '''
     List all possible analyses for given set of parameter options.
     For explanation of the arguments see ``run_analysis``. The only difference
-    is that ``list_analyses`` takes list of values for each of the arguments.
+    is that ``list_analyses`` takes list of values for each of the arguments -
+    where each element of the list is one analysis option that should be
+    combined with all the other options.
     '''
 
     from itertools import product
@@ -446,11 +448,11 @@ def run_many(study=list('ABC'), contrast=['cvsc', 'cvsd', 'creg', 'cdreg',
                                  avg_freq, selection, transform)
 
     pbar = pbarobj(progressbar, len(analyses))
-    for std, cntr, eys, spc, frqrng, avgfrq, sel in analyses:
+    for std, cntr, eys, spc, frqrng, avgfrq, sel, trnsf in analyses:
         with silent_mne(full_silence=True):
             stat = run_analysis(study=std, contrast=cntr, eyes=eys, space=spc,
                                 freq_range=frqrng, avg_freq=avgfrq,
-                                selection=sel, verbose=False)
+                                selection=sel, transform=trnsf, verbose=False)
             save_stat(stat, save_dir=save_dir)
         pbar.update(1)
     pbar.update(1)

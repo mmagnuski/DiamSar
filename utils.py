@@ -16,6 +16,7 @@ colors['mid'] = hc_sub_mid
 colors['gray'] = graycol
 del hc_sub_mid, graycol, col
 
+
 # - [ ] move to borsar, try using autonotebook if not str
 # - [ ] later allow for tqdm progressbar as first arg
 def progressbar(progressbar, total=None):
@@ -23,7 +24,6 @@ def progressbar(progressbar, total=None):
         from tqdm import tqdm_notebook
         pbar = tqdm_notebook(total=total)
     elif progressbar == 'text':
-        # check mne's progressbar...
         from tqdm import tqdm
         pbar = tqdm(total=total)
     else:
