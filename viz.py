@@ -117,51 +117,47 @@ def plot_grid_cluster(stats_clst, contrast, vlim=3):
 
 def plot_multi_topo(psd_avg_high_fr, psd_avg_low_fr, psd_avg_high_asy, psd_avg_low_asy,
                     info_sel_fr, info_sel_asy, vmax_fr, vmin_fr, vmax_asy):
-    '''Creating figure for multiple psds'''
-    fig, axs = plt.subplots(nrows=2, ncols=2, figsize=(8, 8),
-                       gridspec_kw=dict(height_ratios=[0.5, 0.5], hspace=0.05, wspace=0.05,
-                                        bottom=0.05, top=0.9, left=0.05, right=0.7))
-    cax1 = fig.add_axes([0.75, 0.565, 0.05, 0.3])
-    cax2 = fig.add_axes([0.75, 0.1, 0.05, 0.3])
+    '''Creating combined Topo object for multiple psds'''
+    fig, axs = plt.subplots(nrows=2, ncols=3, figsize=(5, 5),
+                           gridspec_kw=dict(height_ratios=[0.5, 0.5], width_ratios=[0.47, 0.47, 0.06],
+                                            hspace=0.05, wspace=0.4,
+                                            bottom=0.05, top=0.9, left=0.07, right=0.85))
 
-    tp_low_fr = Topo(psd_avg_low_fr, info=info_sel_fr, cmap='Reds',
-          vmin=vmin_fr, vmax=vmax_fr, extrapolate='head',
-         outlines = 'skirt', axes = axs[0,0], border = 'mean')
-    tp_high_fr = Topo(psd_avg_high_fr, info=info_sel_fr, cmap='Reds',
-          vmin=vmin_fr, vmax=vmax_fr, extrapolate='head',
-         outlines = 'skirt', axes = axs[0,1], border = 'mean')
-    tp_low_asy = Topo(psd_avg_low_asy, info=info_sel_asy, cmap='RdBu_r',
-          vmin=-vmax_asy, vmax=vmax_asy, extrapolate='head',
-         outlines = 'skirt', axes = axs[1,0], border = 'mean')
-    tp_high_asy = Topo(psd_avg_high_asy, info=info_sel_asy, cmap='RdBu_r',
-          vmin=-vmax_asy, vmax=vmax_asy, extrapolate='head',
-         outlines = 'skirt', axes = axs[1,1], border = 'mean')
-    for tp in [tp_low_fr, tp_high_fr, tp_low_asy, tp_high_asy]:
+    topos = list()
+    topomap_args = dict(extrapolate='head', outlines='skirt', border='mean')
+
+    for val, ax in zip(psds_avg[:2], axs[0, :]):
+        topos.append(Topo(val, info_frontal, cmap='Reds', vmin=-28,
+                          vmax=-26, axes=ax, **topomap_args))
+
+    for val, ax in zip(psds_avg[2:], axs[1, :]):
+        topos.append(Topo(val, info_asy, cmap='RdBu_r', vmin=-0.13,
+                          vmax=0.13, axes=ax, **topomap_args))
+
+    for tp in topos:
         tp.solid_lines()
 
-    cmap1 = mpl.cm.get_cmap('Reds')
-    norm1 = mpl.colors.Normalize(vmin=-28, vmax=-26)
-    cb1 = mpl.colorbar.ColorbarBase(cax1, cmap=cmap1,
-                                norm=norm1,
-                                orientation='vertical')
-    cmap2 = mpl.cm.get_cmap('RdBu_r')
-    norm2 = mpl.colors.Normalize(vmin=-0.13, vmax=0.13)
-    cb2 = mpl.colorbar.ColorbarBase(cax2, cmap=cmap2,
-                                norm=norm2,
-                                orientation='vertical')
+    cbar1 = plt.colorbar(axs[0,0].images[0], cax=axs[0, 2])
+    cbar2 = plt.colorbar(axs[1,0].images[0], cax=axs[1, 2])
+    tck = cbar1.get_ticks()
+    cbar1.set_ticks(tck[::2])
 
-    cax1.set_ylabel('log(alpha power)')
-    cax2.set_ylabel('alpha power')
-    cax1.set_yticks([0., 0.25,  0.5 ,  0.75 , 1.   ])
-    cax1.set_yticklabels([-28, -27.5, -27, -26.5, -26])
-    axs[0, 0].set_title('group')
-    axs[0, 0].set_ylabel('frontal')
-    axs[1, 0].set_ylabel('asy')
-    axs[0, 1].set_title('group')
-    plt.locator_params(nbins=5)
-    plt.rc('axes', labelsize=22)
-    plt.rc('axes', titlesize=22)
-    plt.rc('ytick', labelsize=16)
-    plt.rc('legend', fontsize=16)
+    axs[0, 0].set_title('depressed').set_position([.5, 1.1])
+    axs[0, 1].set_title('control').set_position([.5, 1.1])
+    axs[0, 0].set_ylabel('alpha power', fontsize=22, labelpad=20)
+    axs[1, 0].set_ylabel('alpha asymmetry', fontsize=22, labelpad=20)
+    axs[0, 2].set_ylabel('log(alpha power)')
+    axs[1, 2].set_ylabel('alpha power')
+
+    cb1_pos1 = axs[0, 2].get_position().bounds[0]
+    cb1_pos2 = axs[0, 0].get_position().bounds[1]
+    cb1_pos3 = axs[0, 2].get_position().bounds[2]
+    cb1_pos4 = axs[0, 0].get_position().bounds[3]
+    axs[0, 2].set_position([cb1_pos1, cb1_pos2, cb1_pos3, cb1_pos4])
+    cb2_pos1 = axs[1, 2].get_position().bounds[0]
+    cb2_pos2 = axs[1, 0].get_position().bounds[1]
+    cb2_pos3 = axs[1, 2].get_position().bounds[2]
+    cb2_pos4 = axs[1, 0].get_position().bounds[3]
+    axs[1, 2].set_position([cb2_pos1, cb2_pos2, cb2_pos3, cb2_pos4])
 
     return fig
