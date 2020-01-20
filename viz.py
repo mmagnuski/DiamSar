@@ -118,9 +118,10 @@ def plot_grid_cluster(stats_clst, contrast, vlim=3):
 def plot_multi_topo(psds_avg, info):
     '''Creating combined Topo object for multiple psds'''
     fig, axs = plt.subplots(nrows=2, ncols=3, figsize=(5, 5),
-                           gridspec_kw=dict(height_ratios=[0.5, 0.5], width_ratios=[0.47, 0.47, 0.06],
-                                            hspace=0.05, wspace=0.4,
-                                            bottom=0.05, top=0.9, left=0.07, right=0.85))
+                           gridspec_kw=dict(height_ratios=[0.5, 0.5],
+                           width_ratios=[0.47, 0.47, 0.06],
+                           hspace=0.05, wspace=0.4,
+                           bottom=0.05, top=0.9, left=0.07, right=0.85))
 
     topos = list()
     topomap_args = dict(extrapolate='head', outlines='skirt', border='mean')
@@ -136,8 +137,8 @@ def plot_multi_topo(psds_avg, info):
     for tp in topos:
         tp.solid_lines()
 
-    cbar1 = plt.colorbar(axs[0,0].images[0], cax=axs[0, 2])
-    cbar2 = plt.colorbar(axs[1,0].images[0], cax=axs[1, 2])
+    cbar1 = plt.colorbar(axs[0, 0].images[0], cax=axs[0, 2])
+    cbar2 = plt.colorbar(axs[1, 0].images[0], cax=axs[1, 2])
     tck = cbar1.get_ticks()
     cbar1.set_ticks(tck[::2])
 
@@ -148,15 +149,10 @@ def plot_multi_topo(psds_avg, info):
     axs[0, 2].set_ylabel('log(alpha power)')
     axs[1, 2].set_ylabel('alpha power')
 
-    cb1_pos1 = axs[0, 2].get_position().bounds[0]
-    cb1_pos2 = axs[0, 0].get_position().bounds[1]
-    cb1_pos3 = axs[0, 2].get_position().bounds[2]
-    cb1_pos4 = axs[0, 0].get_position().bounds[3]
-    axs[0, 2].set_position([cb1_pos1, cb1_pos2, cb1_pos3, cb1_pos4])
-    cb2_pos1 = axs[1, 2].get_position().bounds[0]
-    cb2_pos2 = axs[1, 0].get_position().bounds[1]
-    cb2_pos3 = axs[1, 2].get_position().bounds[2]
-    cb2_pos4 = axs[1, 0].get_position().bounds[3]
-    axs[1, 2].set_position([cb2_pos1, cb2_pos2, cb2_pos3, cb2_pos4])
+    for row in range(2):
+        cbar_bounds = axs[row, 2].get_position().bounds
+        topo_bounds = axs[row, 0].get_position().bounds
+        axs[row, 2].set_position([cbar_bounds[0], topo_bounds[1],
+                              cbar_bounds[2], topo_bounds[3]])
 
     return fig
