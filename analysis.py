@@ -158,7 +158,7 @@ def run_analysis(study='C', contrast='cvsc', eyes='closed', space='avg',
 
         # construct Clusters with stat_info in description
         return construct_clusters(clusters, pval, stat, space, stat_info, info,
-                                 src, subjects_dir, subject, ch_names, freq)
+                                  src, subjects_dir, subject, ch_names, freq)
     else:
         # for selected pairs (two channel pairs) we don't correct for
         # multiple comparisons:
@@ -175,14 +175,15 @@ def run_analysis(study='C', contrast='cvsc', eyes='closed', space='avg',
         return stat_info
 
 
-def save_stat(stat):
+def save_stat(stat, save_dir='stats'):
     '''
     Save stat_info dictionary or Clusters object with default name and to
     default directory.
     '''
     from borsar.cluster import Clusters
 
-    save_dir = op.join(pht.paths.get_path('main', study='C'), 'analysis', 'stats')
+    save_dir = op.join(pth.paths.get_path('main', study='C'), 'analysis',
+                       save_dir)
     fname = ('stat_study-{}_eyes-{}_space-{}_contrast-{}_selection-{}'
              '_freqrange-{}_avgfreq-{}_transform-{}_divbysum-{}.hdf5')
     keys = ['study', 'eyes', 'space', 'contrast', 'selection', 'freq_range',
@@ -202,7 +203,8 @@ def save_stat(stat):
 # TODO: add option to read source space Clusters
 def load_stat(fname=None, study='C', eyes='closed', space='avg',
               contrast='cvsd', selection='asy_frontal', freq_range=(8, 12),
-              avg_freq=True, transform='log', div_by_sum=False):
+              avg_freq=True, transform='log', div_by_sum=False,
+              stat_dir='stats'):
     '''Read previously saved analysis result.
 
     Parameters
@@ -226,7 +228,8 @@ def load_stat(fname=None, study='C', eyes='closed', space='avg',
         vars = [study, eyes, space, contrast, selection, freq_range,
                 avg_freq, transform, div_by_sum]
         fname = fname.format(*vars)
-        stat_dir = op.join(pth.paths.get_path('main', 'C'), 'analysis', 'stats')
+        stat_dir = op.join(pth.paths.get_path('main', 'C'), 'analysis',
+                           stat_dir)
         fname = op.join(stat_dir, fname)
 
     return _load_stat(fname)
@@ -249,7 +252,7 @@ def _load_stat(fname):
         return stat
 
 
-def summarize_stats(split=True, reduce_columns=True):
+def summarize_stats(split=True, reduce_columns=True, stat_dir='stats'):
     '''Summarize multiple analyses (saved in analysis dir) in a dataframe.
 
     Parameters
@@ -273,12 +276,12 @@ def summarize_stats(split=True, reduce_columns=True):
     '''
     from mne.externals import h5io
 
-    stat_dir = op.join(pth.paths.get_path('main', 'C'), 'analysis', 'stats')
+    stat_dir = op.join(pth.paths.get_path('main', 'C'), 'analysis', stat_dir)
     stat_files = [f for f in os.listdir(stat_dir) if f.endswith('.hdf5')]
     n_stat = len(stat_files)
 
     # first, create an empty dataframe
-    stat_params = ['study', 'contrast', 'N_low', 'N_high', 'N_all', 'space',
+    stat_params = ['study', 'contrast', 'space', 'N_low', 'N_high', 'N_all',
                    'eyes', 'selection', 'freq_range', 'avg_freq', 'transform',
                    'div_by_sum']
     stat_summary = ['min t', 'max t', 'n clusters', 'min cluster p',
@@ -366,23 +369,26 @@ def remove_columns_with_no_variability(df):
 def list_analyses(study=list('ABC'), contrast=['cvsc', 'cvsd', 'creg', 'cdreg',
                   'dreg'], eyes=['closed'], space=['avg', 'csd', 'src'],
                   freq_range=[(8, 13)], avg_freq=[True, False],
-                  selection=['asy_frontal', 'asy_pairs', 'all'], verbose=True):
+                  selection=['asy_frontal', 'asy_pairs', 'all'],
+                  transform=['log'], verbose=True):
     '''
     List all possible analyses for given set of parameter options.
     For explanation of the arguments see ``run_analysis``. The only difference
-    is that ``list_analyses`` takes list of values for each of the arguments.
+    is that ``list_analyses`` takes list of values for each of the arguments -
+    where each element of the list is one analysis option that should be
+    combined with all the other options.
     '''
 
     from itertools import product
     prod = list(product(study, contrast, eyes, space, freq_range, avg_freq,
-                        selection))
+                        selection, transform))
 
     if verbose:
         all_combinations = len(prod)
         print('All analysis combinations: {:d}'.format(all_combinations))
 
     good_analyses = list()
-    for std, cntr, eye, spc, frqrng, avgfrq, sel in prod:
+    for std, cntr, eye, spc, frqrng, avgfrq, sel, trnsf in prod:
         # only wide frequency range is not averarged
         if not avgfrq and not frqrng == (8, 13):
             continue
@@ -413,7 +419,7 @@ def list_analyses(study=list('ABC'), contrast=['cvsc', 'cvsd', 'creg', 'cdreg',
             continue
 
         # else: good analysis
-        good_analyses.append((std, cntr, eye, spc, frqrng, avgfrq, sel))
+        good_analyses.append((std, cntr, eye, spc, frqrng, avgfrq, sel, trnsf))
 
     if verbose:
         reduced = len(good_analyses)
@@ -425,8 +431,8 @@ def list_analyses(study=list('ABC'), contrast=['cvsc', 'cvsd', 'creg', 'cdreg',
 def run_many(study=list('ABC'), contrast=['cvsc', 'cvsd', 'creg', 'cdreg',
              'dreg'], eyes=['closed'], space=['avg', 'csd', 'src'],
              freq_range=[(8, 13)], avg_freq=[True, False],
-             selection=['asy_frontal', 'asy_pairs', 'all'], analyses=None,
-             progressbar='notebook'):
+             selection=['asy_frontal', 'asy_pairs', 'all'], transform=['log'],
+             analyses=None, progressbar='notebook', save_dir='stats'):
     '''
     Run multiple analyses parametrized by combinations of options given in
     arguments.
@@ -439,15 +445,15 @@ def run_many(study=list('ABC'), contrast=['cvsc', 'cvsd', 'creg', 'cdreg',
 
     if analyses is None:
         analyses = list_analyses(study, contrast, eyes, space, freq_range,
-                                 avg_freq, selection)
+                                 avg_freq, selection, transform)
 
     pbar = pbarobj(progressbar, len(analyses))
-    for std, cntr, eys, spc, frqrng, avgfrq, sel in analyses:
+    for std, cntr, eys, spc, frqrng, avgfrq, sel, trnsf in analyses:
         with silent_mne(full_silence=True):
             stat = run_analysis(study=std, contrast=cntr, eyes=eys, space=spc,
                                 freq_range=frqrng, avg_freq=avgfrq,
-                                selection=sel, verbose=False)
-            save_stat(stat)
+                                selection=sel, transform=trnsf, verbose=False)
+            save_stat(stat, save_dir=save_dir)
         pbar.update(1)
     pbar.update(1)
 
@@ -456,7 +462,7 @@ def analyses_to_df(analyses):
     '''Turn list of tuples with analysis parameters to dataframe
     representation.'''
     df = pd.DataFrame(columns=['study', 'contrast', 'eyes', 'space', 'freq',
-                               'avg_freq', 'selection'])
+                               'avg_freq', 'selection', 'transform'])
     for idx, analysis in enumerate(analyses):
         if isinstance(analysis[4], (list, tuple)):
             analysis = list(analysis)
