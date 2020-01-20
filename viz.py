@@ -117,11 +117,13 @@ def plot_grid_cluster(stats_clst, contrast, vlim=3):
 
 def plot_multi_topo(psds_avg, info):
     '''Creating combined Topo object for multiple psds'''
+    gridspec = {height_ratios = [0.5, 0.5],
+                width_ratios = [0.47, 0.47, 0.06],
+                hspace=0.05, wspace=0.4,
+                bottom=0.05, top=0.9, left=0.07, right=0.85)}
+
     fig, axs = plt.subplots(nrows=2, ncols=3, figsize=(5, 5),
-                           gridspec_kw=dict(height_ratios=[0.5, 0.5],
-                           width_ratios=[0.47, 0.47, 0.06],
-                           hspace=0.05, wspace=0.4,
-                           bottom=0.05, top=0.9, left=0.07, right=0.85))
+                            gridspec_kw=gridspec)
 
     topos = list()
     topomap_args = dict(extrapolate='head', outlines='skirt', border='mean')
