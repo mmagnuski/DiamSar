@@ -115,8 +115,7 @@ def plot_grid_cluster(stats_clst, contrast, vlim=3):
     return fig
 
 
-def plot_multi_topo(psd_avg_high_fr, psd_avg_low_fr, psd_avg_high_asy, psd_avg_low_asy,
-                    info_sel_fr, info_sel_asy, vmax_fr, vmin_fr, vmax_asy):
+def plot_multi_topo(psds_avg, info):
     '''Creating combined Topo object for multiple psds'''
     fig, axs = plt.subplots(nrows=2, ncols=3, figsize=(5, 5),
                            gridspec_kw=dict(height_ratios=[0.5, 0.5], width_ratios=[0.47, 0.47, 0.06],
