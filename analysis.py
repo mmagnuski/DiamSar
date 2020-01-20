@@ -369,7 +369,8 @@ def remove_columns_with_no_variability(df):
 def list_analyses(study=list('ABC'), contrast=['cvsc', 'cvsd', 'creg', 'cdreg',
                   'dreg'], eyes=['closed'], space=['avg', 'csd', 'src'],
                   freq_range=[(8, 13)], avg_freq=[True, False],
-                  selection=['asy_frontal', 'asy_pairs', 'all'], verbose=True):
+                  selection=['asy_frontal', 'asy_pairs', 'all'],
+                  transform=['log'], verbose=True):
     '''
     List all possible analyses for given set of parameter options.
     For explanation of the arguments see ``run_analysis``. The only difference
@@ -378,14 +379,14 @@ def list_analyses(study=list('ABC'), contrast=['cvsc', 'cvsd', 'creg', 'cdreg',
 
     from itertools import product
     prod = list(product(study, contrast, eyes, space, freq_range, avg_freq,
-                        selection))
+                        selection, transform))
 
     if verbose:
         all_combinations = len(prod)
         print('All analysis combinations: {:d}'.format(all_combinations))
 
     good_analyses = list()
-    for std, cntr, eye, spc, frqrng, avgfrq, sel in prod:
+    for std, cntr, eye, spc, frqrng, avgfrq, sel, trnsf in prod:
         # only wide frequency range is not averarged
         if not avgfrq and not frqrng == (8, 13):
             continue
@@ -416,7 +417,7 @@ def list_analyses(study=list('ABC'), contrast=['cvsc', 'cvsd', 'creg', 'cdreg',
             continue
 
         # else: good analysis
-        good_analyses.append((std, cntr, eye, spc, frqrng, avgfrq, sel))
+        good_analyses.append((std, cntr, eye, spc, frqrng, avgfrq, sel, trnsf))
 
     if verbose:
         reduced = len(good_analyses)
@@ -428,7 +429,7 @@ def list_analyses(study=list('ABC'), contrast=['cvsc', 'cvsd', 'creg', 'cdreg',
 def run_many(study=list('ABC'), contrast=['cvsc', 'cvsd', 'creg', 'cdreg',
              'dreg'], eyes=['closed'], space=['avg', 'csd', 'src'],
              freq_range=[(8, 13)], avg_freq=[True, False],
-             selection=['asy_frontal', 'asy_pairs', 'all'],
+             selection=['asy_frontal', 'asy_pairs', 'all'], transform=['log'],
              analyses=None, progressbar='notebook', save_dir='stats'):
     '''
     Run multiple analyses parametrized by combinations of options given in
@@ -442,7 +443,7 @@ def run_many(study=list('ABC'), contrast=['cvsc', 'cvsd', 'creg', 'cdreg',
 
     if analyses is None:
         analyses = list_analyses(study, contrast, eyes, space, freq_range,
-                                 avg_freq, selection)
+                                 avg_freq, selection, transform)
 
     pbar = pbarobj(progressbar, len(analyses))
     for std, cntr, eys, spc, frqrng, avgfrq, sel in analyses:
@@ -459,7 +460,7 @@ def analyses_to_df(analyses):
     '''Turn list of tuples with analysis parameters to dataframe
     representation.'''
     df = pd.DataFrame(columns=['study', 'contrast', 'eyes', 'space', 'freq',
-                               'avg_freq', 'selection'])
+                               'avg_freq', 'selection', 'transform'])
     for idx, analysis in enumerate(analyses):
         if isinstance(analysis[4], (list, tuple)):
             analysis = list(analysis)
