@@ -76,12 +76,12 @@ def _to_data_vert(src, vert_dct, return_array=True):
     Returns
     -------
     vert : array or dict
-        If `return_array` is True: `vert` is one array that can be used to
-        index into `stc.data` (`stc.data[vert, 0]` for example).
-        If `return_array` is False `vert` is a dictionary with 'lh' and 'rh'
-        where `vert['rh']` gives data vertex indices to `stc.data` for right
-        hemisphere and `vert['lh']` gives data vertex indices to `stc.data` for
-        left hemisphere.
+        If ``return_array`` is True: ``vert`` is one array that can be used to
+        index into ``stc.data`` (``stc.data[vert, 0]`` for example). If
+        ``return_array`` is ``False`` then ``vert`` is a dictionary with
+        ``'lh'`` and ``'rh'`` where ``vert['rh']`` gives data vertex indices
+        to ``stc.data`` for right hemisphere and ``vert['lh']`` gives data
+        vertex indices to ``stc.data`` for left hemisphere.
     '''
     vertices = _get_vertices(src)
     num_lh_vert = len(vertices[0])
