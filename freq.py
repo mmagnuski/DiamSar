@@ -419,14 +419,16 @@ def _deal_with_csd_inputs(tmin, tmax, events, event_id):
 
 def get_psds(study='C', space='avg', contrast='cvsd', selection='frontal'):
     '''Reading psds for selected channels, space and contrast.'''
-    '''
+    from .utils import group_bdi
+    from . import freq
+
     bdi = pth.paths.get_data('bdi', study=study)
     psds, freqs, ch_names, subj_id = pth.paths.get_data(
         'psd', study=study, space=space)
     info = pth.paths.get_data('info', study=study)
 
-    grp = ds.utils.group_bdi(subj_id, bdi, method=contrast)
-    psd, this_freq, ch_names = ds.freq.format_psds(
+    grp = group_bdi(subj_id, bdi, method=contrast)
+    psd, this_freq, ch_names = freq.format_psds(
         psds, freqs, info=info, selection=selection, average_freq=True)
     chs = freq.select_channels(info, selection)
 

@@ -125,9 +125,9 @@ def plot_multi_topo(psds_avg, info_frontal, info_asy):
     gridspec = dict(height_ratios=[0.5, 0.5],
                     width_ratios=[0.47, 0.47, 0.06],
                     hspace=0.05, wspace=0.4,
-                    bottom=0.05, top=0.9, left=0.07, right=0.85)
+                    bottom=0.05, top=0.95, left=0.07, right=0.85)
 
-    fig, axs = plt.subplots(nrows=2, ncols=3, figsize=(5, 5),
+    fig, axs = plt.subplots(nrows=2, ncols=3, figsize=(10, 7.5),
                             gridspec_kw=gridspec)
 
     topos = list()
@@ -149,19 +149,24 @@ def plot_multi_topo(psds_avg, info_frontal, info_asy):
     plt.colorbar(axs[1, 0].images[0], cax=axs[1, 2])
     tck = cbar1.get_ticks()
     cbar1.set_ticks(tck[::2])
+    # tck_lab = cbar1.get_ticklabels()
+    # cbar1.set_ticklabels(tck_lab, fontsize=15)
 
-    axs[0, 0].set_title('depressed').set_position([.5, 1.1])
-    axs[0, 1].set_title('control').set_position([.5, 1.1])
+    axs[0, 0].set_title('depressed', fontsize=22).set_position([.5, 1.1])
+    axs[0, 1].set_title('control', fontsize=22).set_position([.5, 1.1])
     axs[0, 0].set_ylabel('alpha power', fontsize=22, labelpad=20)
     axs[1, 0].set_ylabel('alpha asymmetry', fontsize=22, labelpad=20)
-    axs[0, 2].set_ylabel('log(alpha power)')
-    axs[1, 2].set_ylabel('alpha power')
+    axs[0, 2].set_ylabel('log(alpha power)', fontsize=22)
+    axs[1, 2].set_ylabel('alpha power', fontsize=22)
+
+    fig.canvas.draw()
 
     for row in range(2):
         cbar_bounds = axs[row, 2].get_position().bounds
         topo_bounds = axs[row, 0].get_position().bounds
+        tcklb = axs[row, 2].get_yticklabels()
+        axs[row, 2].set_yticklabels(tcklb, fontsize=15)
         axs[row, 2].set_position([cbar_bounds[0], topo_bounds[1],
                                   cbar_bounds[2], topo_bounds[3]])
 
-    fig.canvas.draw()
     return fig
