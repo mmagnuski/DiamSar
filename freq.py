@@ -418,7 +418,7 @@ def _deal_with_csd_inputs(tmin, tmax, events, event_id):
 
 
 def get_psds(study='C', space='avg', contrast='cvsd', selection='frontal'):
-    ''' Selecting psds for selected channels for defined contrast
+    '''Reading psds for selected channels, space and contrast.'''
     '''
     bdi = pth.paths.get_data('bdi', study=study)
     psds, freqs, ch_names, subj_id = pth.paths.get_data(
