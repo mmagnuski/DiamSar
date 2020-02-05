@@ -1,15 +1,20 @@
-from sarna.init import *
+import numpy as np
+import matplotlib.pyplot as plt
+
 from borsar.stats import format_pvalue
+from borsar.viz import Topo
 
 from sarna.viz import prepare_equal_axes
 from DiamSar.analysis import load_stat
 
-
 # - [ ] change to use Info
 # - [ ] make sure Info in .get_data() are cached
+
+
 def plot_unavailable(stat, axis=None):
     '''Plot "empty" topography with 'NA' in the middle.'''
-    topo = stat.plot(cluster_idx=0, outlines='skirt', extrapolate='head', axes=axis)
+    topo = stat.plot(cluster_idx=0, outlines='skirt', extrapolate='head',
+                     axes=axis)
     topo.img.remove()
     topo.chan.remove()
     for line in topo.lines.collections:
@@ -94,7 +99,7 @@ def plot_grid_cluster(stats_clst, contrast, vlim=3):
 
         if idx == 1:
             plt.text(mid_x, 0.935, 'STUDY', va='center', ha='center',
-                 transform=fig.transFigure, fontsize=21)
+                     transform=fig.transFigure, fontsize=21)
 
     # add reference labels
     # --------------------
@@ -110,6 +115,58 @@ def plot_grid_cluster(stats_clst, contrast, vlim=3):
 
     mid_y = np.mean(midys)
     plt.text(0.03, mid_y, 'REFERENCE', va='center', ha='center',
-                 transform=fig.transFigure, fontsize=21, rotation=90)
+             transform=fig.transFigure, fontsize=21, rotation=90)
+
+    return fig
+
+
+def plot_multi_topo(psds_avg, info_frontal, info_asy):
+    '''Creating combined Topo object for multiple psds'''
+    gridspec = dict(height_ratios=[0.5, 0.5],
+                    width_ratios=[0.47, 0.47, 0.06],
+                    hspace=0.05, wspace=0.4,
+                    bottom=0.05, top=0.95, left=0.07, right=0.85)
+
+    fig, axs = plt.subplots(nrows=2, ncols=3, figsize=(10, 7.5),
+                            gridspec_kw=gridspec)
+
+    topos = list()
+    topomap_args = dict(extrapolate='head', outlines='skirt', border='mean')
+
+    for val, ax in zip(psds_avg[:2], axs[0, :]):
+        topos.append(Topo(val, info_frontal, cmap='Reds', vmin=-28,
+                          vmax=-26, axes=ax, **topomap_args))
+
+    for val, ax in zip(psds_avg[2:], axs[1, :]):
+        topos.append(Topo(val, info_asy, cmap='RdBu_r', vmin=-0.13,
+                          vmax=0.13, axes=ax, show=False,
+                          **topomap_args))
+
+    for tp in topos:
+        tp.solid_lines()
+
+    cbar1 = plt.colorbar(axs[0, 0].images[0], cax=axs[0, 2])
+    plt.colorbar(axs[1, 0].images[0], cax=axs[1, 2])
+    tck = cbar1.get_ticks()
+    cbar1.set_ticks(tck[::2])
+    # tck_lab = cbar1.get_ticklabels()
+    # cbar1.set_ticklabels(tck_lab, fontsize=15)
+
+    axs[0, 0].set_title('depressed', fontsize=22).set_position([.5, 1.1])
+    axs[0, 1].set_title('control', fontsize=22).set_position([.5, 1.1])
+    axs[0, 0].set_ylabel('alpha power', fontsize=22, labelpad=20)
+    axs[1, 0].set_ylabel('alpha asymmetry', fontsize=22, labelpad=20)
+    axs[0, 2].set_ylabel('log(alpha power)', fontsize=22)
+    axs[1, 2].set_ylabel('alpha power', fontsize=22)
+
+    fig.canvas.draw()
+
+    for row in range(2):
+        cbar_bounds = axs[row, 2].get_position().bounds
+        topo_bounds = axs[row, 0].get_position().bounds
+        tcklb = axs[row, 2].get_yticklabels()
+        axs[row, 2].set_yticklabels(tcklb, fontsize=15)
+        axs[row, 2].set_position([cbar_bounds[0], topo_bounds[1],
+                                  cbar_bounds[2], topo_bounds[3]])
 
     return fig
