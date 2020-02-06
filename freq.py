@@ -242,8 +242,9 @@ def compute_all_rest(study='C', event_id=None, tmin=1., tmax=60., winlen=2.,
 # - [ ] why make_csd_rest_old did not return NaNs for the subject that
 #       has NaNs both in channel data and make_csd_morlet_raw
 # - [x] compare csd's between cnt and raw versions
-def make_csd_rest_approx(raw, frequencies, events=None, event_id=None, tmin=None,
-                      tmax=None, n_jobs=1, n_cycles=7.):
+def make_csd_rest_approx(raw, frequencies, events=None, event_id=None,
+                         tmin=None, tmax=None, n_jobs=1, n_cycles=7.,
+                         decim=4, segment_length=1.):
     '''Approximate CSD for continuous signals by segmenting and computing CSD
     on segments.
 
@@ -277,7 +278,8 @@ def make_csd_rest_approx(raw, frequencies, events=None, event_id=None, tmin=None
         this_tmin = event_onset + tmin
         this_tmax = event_onset + tmax
         raw_crop = raw.copy().crop(this_tmin, this_tmax)
-        windows = _segment_raw(raw_crop, preload=True, verbose=False)
+        windows = _segment_raw(raw_crop, segment_length=segment_length,
+                               preload=True, verbose=False)
         if len(windows._data) > 0:
             windows_list.append(windows)
 
@@ -285,7 +287,7 @@ def make_csd_rest_approx(raw, frequencies, events=None, event_id=None, tmin=None
 
     return mne.time_frequency.csd_morlet(
         windows_list, frequencies=frequencies, n_jobs=n_jobs,
-        n_cycles=n_cycles, verbose=False)
+        n_cycles=n_cycles, verbose=False, decim=decim)
 
 
 # - [ ] this might go to borsar
