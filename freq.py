@@ -238,12 +238,12 @@ def compute_all_rest(study='C', event_id=None, tmin=1., tmax=60., winlen=2.,
 
 
 # TODO:
-# - [ ] add docs
-# - [ ] why make_csd_rest_old did not return NaNs for the subject that
-#       has NaNs both in channel data and make_csd_morlet_raw
+# - [ ] why make_csd_rest_approx did not return NaNs for the subject that
+#       has NaNs both in channel data and make_csd_morlet_raw?
 # - [x] compare csd's between cnt and raw versions
-def make_csd_rest_approx(raw, frequencies, events=None, event_id=None, tmin=None,
-                      tmax=None, n_jobs=1, n_cycles=7.):
+def make_csd_rest_approx(raw, frequencies, events=None, event_id=None,
+                         tmin=None, tmax=None, n_jobs=1, n_cycles=7.,
+                         decim=4, segment_length=1.):
     '''Approximate CSD for continuous signals by segmenting and computing CSD
     on segments.
 
@@ -254,17 +254,26 @@ def make_csd_rest_approx(raw, frequencies, events=None, event_id=None, tmin=None
     frequencies : list of float
         List of frequencies to compute CSD for.
     events :
-        ...
+        Events array in mne format. Optional.
     event_id :
-        ...
+        Events to use in segmenting. Optional.
     tmin :
-        ...
+        Time start. If ``events`` was passed then ``tmin`` is with respect to
+        each event onset.
     tmax :
-        ...
+        Time end. If ``events`` was passed then ``tmax`` is with respect to
+        each event onset.
     n_jobs :
-        ...
+        Number of jobs to use. Defaults to 1.
     n_cycles :
-        ...
+        Number of cycles to use when computing cross spectral density. Defaults
+        to 7.
+    decim :
+        Decimation factor in time of the cross spectral density result.
+        Defaults to 4.
+    segment_length : float
+        Length of segments to which the signal of interest is divided. Defaults
+        to 1.
     '''
     from mne.epochs import _segment_raw
 
@@ -277,7 +286,8 @@ def make_csd_rest_approx(raw, frequencies, events=None, event_id=None, tmin=None
         this_tmin = event_onset + tmin
         this_tmax = event_onset + tmax
         raw_crop = raw.copy().crop(this_tmin, this_tmax)
-        windows = _segment_raw(raw_crop, preload=True, verbose=False)
+        windows = _segment_raw(raw_crop, segment_length=segment_length,
+                               preload=True, verbose=False)
         if len(windows._data) > 0:
             windows_list.append(windows)
 
@@ -285,10 +295,10 @@ def make_csd_rest_approx(raw, frequencies, events=None, event_id=None, tmin=None
 
     return mne.time_frequency.csd_morlet(
         windows_list, frequencies=frequencies, n_jobs=n_jobs,
-        n_cycles=n_cycles, verbose=False)
+        n_cycles=n_cycles, verbose=False, decim=decim)
 
 
-# - [ ] this might go to borsar
+# - [ ] LATER this might go to borsar
 def make_csd_morlet_raw(raw, freqs, events=None, event_id=None, tmin=0.,
                         tmax=10., n_cycles=3., decim=1):
     '''Calculate cross-spectral density on raw data.
@@ -301,18 +311,21 @@ def make_csd_morlet_raw(raw, freqs, events=None, event_id=None, tmin=0.,
         Instance of Raw object to use in CSD computation.
     frequencies : list of float
         List of frequencies to compute CSD for.
-    events :
-        ...
-    event_id :
-        ...
-    tmin :
-        ...
-    tmax :
-        ...
-    n_jobs :
-        ...
-    n_cycles :
-        ...
+    events : ndarray
+        Events array in mne format (n_events by 3). Optional.
+    event_id : int FIXME?
+        Events to use in segmenting. Optional.
+    tmin : float | None
+        Time start. If ``events`` was passed then ``tmin`` is with respect to
+        each event onset.
+    tmax : float | None
+        Time end. If ``events`` was passed then ``tmax`` is with respect to
+        each event onset.
+    n_jobs : int
+        Number of jobs to use. Defaults to 1.
+    n_cycles : int | list of int
+        Number of cycles to use when computing cross spectral density. Defaults
+        to 7.
     '''
     from mne.time_frequency.csd import CrossSpectralDensity
 
@@ -362,7 +375,7 @@ def make_csd_morlet_raw(raw, freqs, events=None, event_id=None, tmin=0.,
     return CrossSpectralDensity(csds, raw.ch_names, freqs, max_wlen)
 
 
-# - [ ] FIXME - this might go to borsar...
+# - [ ] LATER - this might go to borsar...
 def _apply_annot_to_tfr(annot, tfr, sfreq, freqs, n_cycles, orig_sample=0,
                         fill_value=np.nan):
     '''Fill TFR data with `fill_value` where bad annotations are present.
@@ -418,7 +431,15 @@ def _deal_with_csd_inputs(tmin, tmax, events, event_id):
 
 
 def get_psds(study='C', space='avg', contrast='cvsd', selection='frontal'):
-    '''Reading psds for selected channels, space and contrast.'''
+    '''Reading psds for selected channels, space and contrast.
+
+    Returns
+    -------
+    If regression contrast is asked for the return variables are:
+    psd_sel, info_sel, bdi_sel
+    otherwise the output is:
+    psd_high, psd_low, info_sel
+    '''
     from .utils import group_bdi
     from . import freq
 
