@@ -451,12 +451,15 @@ def get_psds(study='C', space='avg', contrast='cvsd', selection='frontal'):
     grp = group_bdi(subj_id, bdi, method=contrast)
     psd, this_freq, ch_names = freq.format_psds(
         psds, freqs, info=info, selection=selection, average_freq=True)
-    chs = freq.select_channels(info, selection)
 
-    if 'asy' in selection:
-        info_sel = mne.pick_info(info=info, sel=chs['right'])
+    if 'pairs' not in selection:
+        chs = freq.select_channels(info, selection)
+        if 'asy' in selection:
+            info_sel = mne.pick_info(info=info, sel=chs['right'])
+        else:
+            info_sel = mne.pick_info(info=info, sel=chs)
     else:
-        info_sel = mne.pick_info(info=info, sel=chs)
+        info_sel = ch_names
 
     if 'reg' in contrast:
         # return psd, info, bdi
