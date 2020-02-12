@@ -346,14 +346,15 @@ def make_csd_morlet_raw(raw, freqs, events=None, event_id=None, tmin=0.,
         tmax_ts = tmin_ts + int(round(tmax * sfreq))
 
         # FIXME - make sure tfr here is complex
-        data = raw._data[:, tmin_ts-add_rim:tmax_ts+add_rim][np.newaxis, ...]
+        start, end = tmin_ts - add_rim, tmax_ts + add_rim
+        data = raw._data[:, start:end][np.newaxis, ...]
         tfr = mne.time_frequency.tfr_array_morlet(
             data, sfreq, freqs, n_cycles=n_cycles, decim=decim)
 
         n_times = tfr.shape[-1]
         tfr = tfr[0, ..., add_rim:n_times-add_rim]
 
-        # FIXME - check that wights make sense
+        # FIXME - check that weights make sense
         wgt = _apply_annot_to_tfr(raw.annotations, tfr, sfreq / decim, freqs,
                                   n_cycles, orig_sample=tmin_ts)
         reduction = np.mean if wgt == 0. else np.nanmean
