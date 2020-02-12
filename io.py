@@ -151,8 +151,9 @@ def load_psd(path, study='C', eyes='closed', space='avg',
         return temp['psd'], temp['freq'], None, temp['subject_id']
 
 
-def read_linord():
+def read_linord(paths):
     '''Read linear order behavioral aggregated files.'''
+    root_dir = paths.get_path('main', study='C')
     beh_dir = op.join(root_dir, 'bazy')
     df = pd.read_excel(op.join(beh_dir, 'transitive.xls'))
     sel_cols = ['easy_0', 'easy_1', 'easy_2', 'difficult_0', 'difficult_1',
@@ -173,19 +174,23 @@ def set_or_join_annot(raw, annot):
         annot = mne.Annotations(full_annot.onset[sorting],
                                 full_annot.duration[sorting],
                                 full_annot.description[sorting])
-    raw.set_annotations(annot)
+    try:
+        raw.set_annotations(annot)
+    except AttributeError:
+        # make sure it works with mne 0.16
+        raw.annotations = annot
 
 
 def warnings_to_ignore_when_reading_files():
     '''List of warnings to ignore when reading files.'''
     ignore_msg = [(r"The following EEG sensors did not have a position "
-                   "specified in the selected montage: \['oko'\]. Their"
+                   "specified in the selected montage: ['oko']. Their"
                    " position has been left untouched."),
                   (r"Limited [0-9]+ annotation\(s\) that were expanding "
                    "outside the data range."),
-                   "invalid value encountered in less",
-                   "invalid value encountered in greater",
-                   ("The data contains 'boundary' events, indicating data "
-                    "discontinuities. Be cautious of filtering and epoching "
-                    "around these events.")]
+                  "invalid value encountered in less",
+                  "invalid value encountered in greater",
+                  ("The data contains 'boundary' events, indicating data "
+                   "discontinuities. Be cautious of filtering and epoching "
+                   "around these events.")]
     return ignore_msg

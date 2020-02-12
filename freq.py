@@ -2,7 +2,7 @@ import os.path as op
 import numpy as np
 import mne
 
-from borsar.utils import find_range, valid_windows
+from borsar.utils import find_range
 from borsar.channels import select_channels, get_ch_names, find_channels
 from borsar.freq import compute_rest_psd
 
@@ -172,8 +172,8 @@ def select_channels_special(info, selection):
             pairs_list = pairs['left'] + pairs['right']
             not_found = [ch for idx, ch in enumerate(pairs_list)
                          if channel_not_found[idx]]
-            raise ValueError('The following channels were not found: {}.'.format(
-                                ', '.join(not_found)))
+            msg = 'The following channels were not found: {}.'
+            raise ValueError(msg.format(', '.join(not_found)))
     return selection
 
 
@@ -198,7 +198,8 @@ def compute_all_rest(study='C', event_id=None, tmin=1., tmax=60., winlen=2.,
         assert event_id in [10, 11]
 
     if save_dir is None:
-        save_dir = op.join(pth.paths.get_path('main', study='C'), 'analysis', 'psd')
+        root_dir = pth.paths.get_path('main', study='C')
+        save_dir = op.join(root_dir, 'analysis', 'psd')
 
     # construct file name based on analysis parameters
     eyes = ('closed' if not study == 'C'
@@ -347,9 +348,8 @@ def make_csd_morlet_raw(raw, freqs, events=None, event_id=None, tmin=0.,
         # FIXME - make sure tfr here is complex
         start, end = tmin_ts - add_rim, tmax_ts + add_rim
         data = raw._data[:, start:end][np.newaxis, ...]
-        tfr = mne.time_frequency.tfr_array_morlet(data, sfreq, freqs,
-                                                  n_cycles=n_cycles,
-                                                  decim=decim)
+        tfr = mne.time_frequency.tfr_array_morlet(
+            data, sfreq, freqs, n_cycles=n_cycles, decim=decim)
 
         n_times = tfr.shape[-1]
         tfr = tfr[0, ..., add_rim:n_times-add_rim]
