@@ -2,6 +2,7 @@ import numpy as np
 import matplotlib.pyplot as plt
 from scipy.stats import sem
 import seaborn as sns
+import pandas as pd
 
 from borsar.stats import format_pvalue
 from borsar.viz import Topo
@@ -9,6 +10,7 @@ from borsar.viz import Topo
 from sarna.viz import prepare_equal_axes
 from DiamSar.analysis import load_stat
 from DiamSar.utils import colors
+from DiamSar import freq
 
 # - [ ] change to use Info
 # - [ ] make sure Info in .get_data() are cached
@@ -156,7 +158,8 @@ def plot_multi_topo(psds_avg, info_frontal, info_asy):
     # cbar1.set_ticklabels(tck_lab, fontsize=15)
 
     axs[0, 0].set_title('diagnosed', fontsize=22).set_position([.5, 1.1])
-    axs[0, 1].set_title('healthy\nControls', fontsize=22).set_position([.5, 1.1])
+    axs[0, 1].set_title('healthy\nControls',
+                        fontsize=22).set_position([.5, 1.1])
     axs[0, 0].set_ylabel('alpha asymmetry', fontsize=22, labelpad=20)
     axs[1, 0].set_ylabel('alpha asymmetry', fontsize=22, labelpad=20)
     axs[0, 2].set_ylabel('log(alpha power)', fontsize=22)
@@ -176,8 +179,9 @@ def plot_multi_topo(psds_avg, info_frontal, info_asy):
 
 
 def plot_ds_swarm(df, axes=None):
-    ax = sns.swarmplot("group", "asym", data=df, size=8,
-                        palette=[colors['diag'], colors['hc']], axes=axes)
+    '''Plotting swarmplot for asymmetry in pairs comparison for single pair'''
+    ax = sns.swarmplot("group", "asym", data=df, size=10,
+                       palette=[colors['diag'], colors['hc']], ax=axes)
     means = df.groupby('group').mean()
     x_pos = ax.get_xticks()
     x_lab = [x.get_text() for x in ax.get_xticklabels()]
@@ -188,7 +192,7 @@ def plot_ds_swarm(df, axes=None):
         ax.plot([this_xpos - width, this_xpos + width], [this_mean, this_mean],
                 color=colors[this_label], lw=2.)
         # add CI
-        this_sem = sem(df_F1F3.query('group == "{}"'.format(this_label)).asym.values)
+        this_sem = sem(df.query('group == "{}"'.format(this_label)).asym.values)
         rct = plt.Rectangle((this_xpos - width, this_mean - this_sem),
                             width * 2, this_sem * 2,
                             facecolor=colors[this_label], alpha=0.3)
@@ -199,3 +203,34 @@ def plot_ds_swarm(df, axes=None):
                        fontsize=20)
     ax.set_xlabel('')
     return ax
+
+
+def plot_swarm_asy(study, space, contrast):
+    '''Plotting swarmplot for asymmetry in pairs comparison
+    for pairs F3 - F4 and F7 - F8'''
+    psd_params = dict(study=study, space=space, contrast=contrast)
+    psd_high, psd_low, ch_names = freq.get_psds(selection='asy_pairs',
+                                                **psd_params)
+
+    data_concat = []
+    for ar in [0, 1]:
+        data = np.concatenate([psd_high[:, ar], psd_low[:, ar]])
+        data_concat.append(data)
+
+    groups = ['diag'] * psd_high.shape[0] + ['hc'] * psd_low.shape[0]
+    df_f1f3 = pd.DataFrame(data={'asym': data_concat[0], 'group': groups})
+    df_f7f8 = pd.DataFrame(data={'asym': data_concat[1], 'group': groups})
+
+    df_list = [df_f1f3, df_f7f8]
+
+    fig, axs = plt.subplots(nrows=1, ncols=2, figsize=(17, 5),
+                            gridspec_kw=dict(width_ratios=[1, 1],
+                                             hspace=0.05, wspace=0.25,
+                                             bottom=0.05, top=0.9, left=0.07,
+                                             right=0.85))
+    for idx, df in enumerate(df_list):
+        plot_ds_swarm(df, axes=axs[idx])
+        ch_name = ch_names[idx].replace('-', ' - ')
+        axs[idx].set_title(ch_name, fontsize=22)
+
+    return fig
