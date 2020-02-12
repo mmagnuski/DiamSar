@@ -1,11 +1,14 @@
 import numpy as np
 import matplotlib.pyplot as plt
+from scipy.stats import sem
+import seaborn as sns
 
 from borsar.stats import format_pvalue
 from borsar.viz import Topo
 
 from sarna.viz import prepare_equal_axes
 from DiamSar.analysis import load_stat
+from DiamSar.utils import colors
 
 # - [ ] change to use Info
 # - [ ] make sure Info in .get_data() are cached
@@ -170,3 +173,29 @@ def plot_multi_topo(psds_avg, info_frontal, info_asy):
                                   cbar_bounds[2], topo_bounds[3]])
 
     return fig
+
+
+def plot_ds_swarm(df, axes=None):
+    ax = sns.swarmplot("group", "asym", data=df, size=8,
+                        palette=[colors['diag'], colors['hc']], axes=axes)
+    means = df.groupby('group').mean()
+    x_pos = ax.get_xticks()
+    x_lab = [x.get_text() for x in ax.get_xticklabels()]
+    width = np.diff(x_pos)[0] * 0.2
+
+    for this_label, this_xpos in zip(x_lab, x_pos):
+        this_mean = means.loc[this_label, 'asym']
+        ax.plot([this_xpos - width, this_xpos + width], [this_mean, this_mean],
+                color=colors[this_label], lw=2.)
+        # add CI
+        this_sem = sem(df_F1F3.query('group == "{}"'.format(this_label)).asym.values)
+        rct = plt.Rectangle((this_xpos - width, this_mean - this_sem),
+                            width * 2, this_sem * 2,
+                            facecolor=colors[this_label], alpha=0.3)
+        ax.add_artist(rct)
+
+    ax.set_ylabel('alpha asymmetry', fontsize=20)
+    ax.set_xticklabels(['diagnosed', 'healthy\ncontrols'],
+                       fontsize=20)
+    ax.set_xlabel('')
+    return ax
