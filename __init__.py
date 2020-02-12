@@ -10,7 +10,7 @@ from borsar.channels import get_ch_pos
 from borsar.utils import silent_mne
 from sarna.events import read_rej
 
-from . import utils, freq, analysis, pth
+from . import utils, freq, analysis, pth, viz
 from .utils import colors
 from .pth import get_file
 from .events import get_task_event_id
