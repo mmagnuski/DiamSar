@@ -152,9 +152,9 @@ def plot_multi_topo(psds_avg, info_frontal, info_asy):
     # tck_lab = cbar1.get_ticklabels()
     # cbar1.set_ticklabels(tck_lab, fontsize=15)
 
-    axs[0, 0].set_title('depressed', fontsize=22).set_position([.5, 1.1])
-    axs[0, 1].set_title('control', fontsize=22).set_position([.5, 1.1])
-    axs[0, 0].set_ylabel('alpha power', fontsize=22, labelpad=20)
+    axs[0, 0].set_title('diagnosed', fontsize=22).set_position([.5, 1.1])
+    axs[0, 1].set_title('healthy\nControls', fontsize=22).set_position([.5, 1.1])
+    axs[0, 0].set_ylabel('alpha asymmetry', fontsize=22, labelpad=20)
     axs[1, 0].set_ylabel('alpha asymmetry', fontsize=22, labelpad=20)
     axs[0, 2].set_ylabel('log(alpha power)', fontsize=22)
     axs[1, 2].set_ylabel('alpha power', fontsize=22)
