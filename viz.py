@@ -234,3 +234,67 @@ def plot_swarm_asy(study, space, contrast):
         axs[idx].set_title(ch_name, fontsize=22)
 
     return fig
+
+
+def plot_heatmap_add1(clst):
+    fig = plt.figure(figsize=(10, 10))
+    gs = fig.add_gridspec(3, 2, hspace=0.5, top=0.95, bottom=0.05,
+                          left=0.07)
+
+    # thismanager = plt.get_current_fig_manager()
+    # thismanager.window.setGeometry(...)
+
+    f_ax1 = fig.add_subplot(gs[:2, :])
+    f_ax2 = fig.add_subplot(gs[2, 0])
+    f_ax3 = fig.add_subplot(gs[2, 1])
+
+    clst_idx = [0, 1] if len(clst) > 1 else None
+    clst.plot(dims=['chan', 'freq'], cluster_idx=clst_idx, axis=f_ax1,
+              vmin=-4, vmax=4)
+    f_ax1.set_xlabel('Frequency (Hz)', fontsize=18)
+    f_ax1.set_ylabel('frontal channels', fontsize=18)
+
+    contrast = clst.description['contrast']
+    cbar_label = ('Regression t value' if 'reg' in contrast
+                  else 't value')
+    cbar_ax = fig.axes[-1]
+    cbar_ax.set_ylabel(cbar_label, fontsize=16)
+
+    # change ticklabels fontsize
+    for tck in f_ax1.get_xticklabels():
+        tck.set_fontsize(16)
+
+    for tck in cbar_ax.get_yticklabels():
+        tck.set_fontsize(15)
+
+    # change axis position (doesn't work...)
+    # fig.canvas.draw()
+    # bounds = cbar_ax.get_position().bounds
+    # bounds = (0.86, *bounds[1:])
+    # cbar_ax.set_position(bounds)
+    # fig.canvas.draw()
+
+    freqs1, freqs2 = (9, 10), (11.5, 12.50)
+    freqlabel1, freqlabel2 = '9 - 10 Hz', '11.5 - 12.5 Hz'
+    idx1, idx2 = None, None
+
+    if contrast == 'dreg' and clst.description['study'] == 'C':
+        freqlabel1 += '\np = {:.3f}'.format(clst.pvals[1])
+        freqlabel2 += '\np = {:.3f}'.format(clst.pvals[0])
+        idx1, idx2 = 1, 0
+
+    # topo 1
+    tp1 = clst.plot(cluster_idx=idx1, freq=freqs1, axes=f_ax2,
+                    vmin=-4, vmax=4, mark_clst_prop=0.3,
+                    border='mean')
+    tp1.axes.set_title(freqlabel1, fontsize=16)
+
+    # topo 2
+    tp2 = clst.plot(cluster_idx=idx2, freq=freqs2, axes=f_ax3,
+                    vmin=-4, vmax=4, mark_clst_prop=0.3,
+                    border='mean')
+    tp2.axes.set_title(freqlabel2, fontsize=16)
+
+    obj_dict = {'heatmap': f_ax1, 'colorbar': cbar_ax, 'topo1': tp1,
+                'topo2': tp2}
+    return fig, obj_dict

@@ -1,3 +1,4 @@
+import re
 import os
 import os.path as op
 import warnings
@@ -96,7 +97,7 @@ def load_src_sym(paths, **kwargs):
 
 
 def load_psd(path, study='C', eyes='closed', space='avg',
-             winlen=2., step=0.5, reg=0.05, weight_norm='nai',
+             winlen=2., step=0.5, reg='.+', weight_norm='.+',
              task=None):
     '''
     Load power spectrum density for given analysis.
@@ -107,19 +108,15 @@ def load_psd(path, study='C', eyes='closed', space='avg',
     if space in ['avg', 'csd']:
         prefix = prefix + '_winlen-{}_step-{}'.format(winlen, step)
     elif space == 'src':
-        prefix = prefix + '_reg-{:.2f}_weightnorm-{}'.format(
-            reg, weight_norm)
-
-    # CONSIDER using something like this to check for caching when read
-    #          function has additional arguments:
-    # data_field = prefix.replace('study-{}_'.format(study), '')
+        reg_pattern = '_reg-{:.2f}' if not isinstance(reg, str) else '_reg-{}'
+        prefix = prefix + (reg_pattern + 'weightnorm-{}').format(reg, weight_norm)
 
     # all psds are in C directory for convenience
     study_dir = path.get_path('main', study='C')
     psd_dir = op.join(study_dir, 'analysis', 'psd')
     files_with_prefix = [f for f in os.listdir(psd_dir)
                          if (f.endswith('.mat') or f.endswith('.hdf5'))
-                         and prefix in f]
+                         and len(re.findall(prefix, f)) > 0]
 
     num_good_files = len(files_with_prefix)
     if num_good_files == 0:
@@ -154,8 +151,9 @@ def load_psd(path, study='C', eyes='closed', space='avg',
         return temp['psd'], temp['freq'], None, temp['subject_id']
 
 
-def read_linord():
+def read_linord(paths):
     '''Read linear order behavioral aggregated files.'''
+    root_dir = paths.get_path('main', study='C')
     beh_dir = op.join(root_dir, 'bazy')
     df = pd.read_excel(op.join(beh_dir, 'transitive.xls'))
     sel_cols = ['easy_0', 'easy_1', 'easy_2', 'difficult_0', 'difficult_1',
@@ -176,19 +174,23 @@ def set_or_join_annot(raw, annot):
         annot = mne.Annotations(full_annot.onset[sorting],
                                 full_annot.duration[sorting],
                                 full_annot.description[sorting])
-    raw.set_annotations(annot)
+    try:
+        raw.set_annotations(annot)
+    except AttributeError:
+        # make sure it works with mne 0.16
+        raw.annotations = annot
 
 
 def warnings_to_ignore_when_reading_files():
     '''List of warnings to ignore when reading files.'''
     ignore_msg = [(r"The following EEG sensors did not have a position "
-                   "specified in the selected montage: \['oko'\]. Their"
+                   "specified in the selected montage: ['oko']. Their"
                    " position has been left untouched."),
                   (r"Limited [0-9]+ annotation\(s\) that were expanding "
                    "outside the data range."),
-                   "invalid value encountered in less",
-                   "invalid value encountered in greater",
-                   ("The data contains 'boundary' events, indicating data "
-                    "discontinuities. Be cautious of filtering and epoching "
-                    "around these events.")]
+                  "invalid value encountered in less",
+                  "invalid value encountered in greater",
+                  ("The data contains 'boundary' events, indicating data "
+                   "discontinuities. Be cautious of filtering and epoching "
+                   "around these events.")]
     return ignore_msg
