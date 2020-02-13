@@ -219,11 +219,11 @@ def plot_swarm_grid(study, space, contrast):
     psd_high, psd_low, ch_names = freq.get_psds(selection='asy_pairs',
                                                 **psd_params)
 
-    df _list = list()
+    df_list = list()
     groups = ['diag'] * psd_high.shape[0] + ['hc'] * psd_low.shape[0]
     for ar in [0, 1]:
         data = np.concatenate([psd_high[:, ar], psd_low[:, ar]])
-        df_list.append(pd.DataFrame(data={'asym': data, 'group': groups})
+        df_list.append(pd.DataFrame(data={'asym': data, 'group': groups}))
 
     gridspec = dict(hspace=0.05, wspace=0.25, bottom=0.05, top=0.9,
                     left=0.07, right=0.85)
