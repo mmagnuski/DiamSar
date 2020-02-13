@@ -252,3 +252,30 @@ def create_dig_montage(inst, montage=None, dig_ch_pos=True, hsp=True,
 
     dig = mne.channels.DigMontage(**args)
     return dig
+
+
+def final_subject_ids(study, verbose=True):
+    '''Get final subject ids for given study.'''
+    psds, _, _, subj_id = pth.paths.get_data('psd', study=study)
+
+    if verbose:
+        print('Selecting subject ids for study {}.'.format(study))
+        print('{} subjects with psds.'.format(len(subj_id)))
+
+    # exclude subjects without enough good data
+    no_nans = ~np.any(np.isnan(psds), axis=(1, 2))
+    subj_id = subj_id[no_nans]
+
+    if verbose and not no_nans.all():
+        print('{} subjects after removing NaN psds.'.format(len(subj_id)))
+
+    # exclude subjects without BDI in table (very rare cases)
+    bdi = pth.paths.get_data('bdi', study=study)
+    has_bdi = np.in1d(subj_id, bdi.index)
+    subj_id = subj_id[has_bdi]
+
+    if verbose and not has_bdi.all():
+        msg = '{} subjects after removing those without BDI score.'
+        print(msg.format(len(subj_id)))
+
+    return subj_id

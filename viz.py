@@ -8,9 +8,12 @@ from borsar.stats import format_pvalue
 from borsar.viz import Topo
 
 from sarna.viz import prepare_equal_axes
-from DiamSar.analysis import load_stat
-from DiamSar.utils import colors
-from DiamSar import freq
+
+from . import freq
+from .analysis import load_stat
+from .utils import colors
+
+
 
 # - [ ] change to use Info
 # - [ ] make sure Info in .get_data() are cached
@@ -235,7 +238,7 @@ def plot_swarm_grid(study, space, contrast):
 
 
 def plot_heatmap_add1(clst):
-    '''Heatmap visualization of the ADD1 analyses.'''
+    '''Plot results of Standardized Analyses (ADD1) with heatmap and topo.'''
     fig = plt.figure(figsize=(10, 10))
     gs = fig.add_gridspec(3, 2, hspace=0.5, top=0.95, bottom=0.05,
                           left=0.07)
@@ -293,3 +296,32 @@ def plot_heatmap_add1(clst):
     obj_dict = {'heatmap': f_ax1, 'colorbar': cbar_ax, 'topo1': tp1,
                 'topo2': tp2}
     return fig, obj_dict
+
+
+def bdi_bdi_histogram(bdi):
+    '''Plot BDI histogram from ``bdi`` dataframe of given study.'''
+    msk = bdi.DIAGNOZA
+    bdi_col = [c for c in bdi.columns if 'BDI' in c][0]
+    hc = bdi.loc[~msk, bdi_col].values
+    diag = bdi.loc[msk, bdi_col].values
+    hc1 = hc[hc <= 5]
+    hc2 = hc[(hc > 5) & (hc <= 10)]
+    hc3 = hc[hc > 10]
+
+    # gridspec_kw=dict(height_ratios=[0.8, 0.2]))
+    fig, ax = plt.subplots(figsize=(5, 6))
+    if not isinstance(ax, (list, tuple, np.ndarray)):
+        ax = [ax]
+
+    plt.sca(ax[0])
+    bins = np.arange(0, 51, step=5)
+    plt.hist([hc1, hc2, hc3, diag], bins, stacked=True,
+             color=[colors['hc'], colors['mid'], colors['subdiag'],
+                    colors['diag']])
+    plt.yticks([0, 5, 10, 15, 20, 25], fontsize=14)
+    plt.ylabel('Number of participants', fontsize=16)
+    plt.xticks([0, 10, 20, 30, 40, 50], fontsize=14)
+    plt.xlabel(bdi_col, fontsize=16)
+    ax[0].set_xlim((0, 50))
+    ax[0].set_ylim((0, 28))
+    return fig, ax
