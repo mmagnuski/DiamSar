@@ -178,8 +178,11 @@ def plot_multi_topo(psds_avg, info_frontal, info_asy):
     return fig
 
 
-def plot_ds_swarm(df, axes=None):
-    '''Plotting swarmplot for asymmetry in pairs comparison for single pair'''
+def plot_swarm(df, axes=None):
+    '''
+    Swarmplot for single channel pairs asymmetry. Used for group contrast
+    visualization.
+    '''
     ax = sns.swarmplot("group", "asym", data=df, size=10,
                        palette=[colors['diag'], colors['hc']], ax=axes)
     means = df.groupby('group').mean()
@@ -188,10 +191,11 @@ def plot_ds_swarm(df, axes=None):
     width = np.diff(x_pos)[0] * 0.2
 
     for this_label, this_xpos in zip(x_lab, x_pos):
+        # plot mean
         this_mean = means.loc[this_label, 'asym']
         ax.plot([this_xpos - width, this_xpos + width], [this_mean, this_mean],
                 color=colors[this_label], lw=2.)
-        # add CI
+        # add CI (currently standard error of the mean)
         this_sem = sem(df.query('group == "{}"'.format(this_label)).asym.values)
         rct = plt.Rectangle((this_xpos - width, this_mean - this_sem),
                             width * 2, this_sem * 2,
@@ -205,29 +209,23 @@ def plot_ds_swarm(df, axes=None):
     return ax
 
 
-def plot_swarm_asy(study, space, contrast):
-    '''Plotting swarmplot for asymmetry in pairs comparison
-    for pairs F3 - F4 and F7 - F8'''
+# FIXME - maybe change to the actual grid used in the paper?
+def plot_swarm_grid(study, space, contrast):
+    '''Swarmplot grid for single channel pair group contrasts.'''
     psd_params = dict(study=study, space=space, contrast=contrast)
     psd_high, psd_low, ch_names = freq.get_psds(selection='asy_pairs',
                                                 **psd_params)
 
-    data_concat = []
+    df _list = list()
+    groups = ['diag'] * psd_high.shape[0] + ['hc'] * psd_low.shape[0]
     for ar in [0, 1]:
         data = np.concatenate([psd_high[:, ar], psd_low[:, ar]])
-        data_concat.append(data)
+        df_list.append(pd.DataFrame(data={'asym': data, 'group': groups})
 
-    groups = ['diag'] * psd_high.shape[0] + ['hc'] * psd_low.shape[0]
-    df_f1f3 = pd.DataFrame(data={'asym': data_concat[0], 'group': groups})
-    df_f7f8 = pd.DataFrame(data={'asym': data_concat[1], 'group': groups})
+    gridspec = dict(hspace=0.05, wspace=0.25, bottom=0.05, top=0.9,
+                    left=0.07, right=0.85)
+    fig, axs = plt.subplots(ncols=2, figsize=(17, 5), gridspec_kw=gridspec)
 
-    df_list = [df_f1f3, df_f7f8]
-
-    fig, axs = plt.subplots(nrows=1, ncols=2, figsize=(17, 5),
-                            gridspec_kw=dict(width_ratios=[1, 1],
-                                             hspace=0.05, wspace=0.25,
-                                             bottom=0.05, top=0.9, left=0.07,
-                                             right=0.85))
     for idx, df in enumerate(df_list):
         plot_ds_swarm(df, axes=axs[idx])
         ch_name = ch_names[idx].replace('-', ' - ')
@@ -237,12 +235,10 @@ def plot_swarm_asy(study, space, contrast):
 
 
 def plot_heatmap_add1(clst):
+    '''Heatmap visualization of the ADD1 analyses.'''
     fig = plt.figure(figsize=(10, 10))
     gs = fig.add_gridspec(3, 2, hspace=0.5, top=0.95, bottom=0.05,
                           left=0.07)
-
-    # thismanager = plt.get_current_fig_manager()
-    # thismanager.window.setGeometry(...)
 
     f_ax1 = fig.add_subplot(gs[:2, :])
     f_ax2 = fig.add_subplot(gs[2, 0])
@@ -267,12 +263,11 @@ def plot_heatmap_add1(clst):
     for tck in cbar_ax.get_yticklabels():
         tck.set_fontsize(15)
 
-    # change axis position (doesn't work...)
+    # FIXME: change axis position (doesn't work...)
     # fig.canvas.draw()
     # bounds = cbar_ax.get_position().bounds
     # bounds = (0.86, *bounds[1:])
     # cbar_ax.set_position(bounds)
-    # fig.canvas.draw()
 
     freqs1, freqs2 = (9, 10), (11.5, 12.50)
     freqlabel1, freqlabel2 = '9 - 10 Hz', '11.5 - 12.5 Hz'
