@@ -8,12 +8,19 @@ from borsar.stats import format_pvalue
 from borsar.viz import Topo
 
 from sarna.viz import prepare_equal_axes
+<<<<<<< HEAD
 
 from . import freq
 from .analysis import load_stat
 from .utils import colors
 
 
+=======
+from DiamSar.analysis import load_stat
+from DiamSar.utils import colors
+from DiamSar import freq
+import DiamSar as ds
+>>>>>>> 7e776b1... add plot_panel
 
 # - [ ] change to use Info
 # - [ ] make sure Info in .get_data() are cached
@@ -192,7 +199,7 @@ def plot_swarm(df, axes=None):
     x_pos = ax.get_xticks()
     x_lab = [x.get_text() for x in ax.get_xticklabels()]
     width = np.diff(x_pos)[0] * 0.2
-
+# plot mean
     for this_label, this_xpos in zip(x_lab, x_pos):
         # plot mean
         this_mean = means.loc[this_label, 'asym']
@@ -230,7 +237,7 @@ def plot_swarm_grid(study, space, contrast):
     fig, axs = plt.subplots(ncols=2, figsize=(17, 5), gridspec_kw=gridspec)
 
     for idx, df in enumerate(df_list):
-        plot_ds_swarm(df, axes=axs[idx])
+        plot_swarm(df, axes=axs[idx])
         ch_name = ch_names[idx].replace('-', ' - ')
         axs[idx].set_title(ch_name, fontsize=22)
 
@@ -325,3 +332,139 @@ def bdi_bdi_histogram(bdi):
     ax[0].set_xlim((0, 50))
     ax[0].set_ylim((0, 28))
     return fig, ax
+
+
+def plot_panel(bdi, colors):
+
+    x, y = ['diag'], ['control']
+    group = x*20 + y*20
+
+    AA_diag = np.random.uniform(low=-2, high=0.75, size=20)
+    AA_diag = list(AA_diag)
+
+    AA_control = np.random.uniform(low=-1, high=1.5, size=20)
+    AA_control = list(AA_control)
+
+    d = {'group': group, 'AA': AA_diag + AA_control}
+    df = pd.DataFrame(d)
+    df['group'] = df['group'].astype('category')
+
+    y = bdi['BDI-II'].values*0.1 + np.random.uniform(low=0, high=10,
+                                                     size=bdi.shape[0])
+    bdi.loc[:, 'y'] = y
+
+    diag = bdi.DIAGNOZA
+    hc = ~diag & (bdi['BDI-II'] <= 5)
+    mid = ~diag & (bdi['BDI-II'] > 5) & (bdi['BDI-II'] <= 10)
+    sub = ~diag & (bdi['BDI-II'] > 10)
+    msk = bdi.DIAGNOZA
+    min_diag_bdi = bdi.loc[msk, 'BDI-II'].min()
+    msk2 = msk & (bdi['BDI-II'] > min_diag_bdi)
+    second_min_diag_bdi = bdi.loc[msk2, 'BDI-II'].min()
+
+    fig, axs = plt.subplots(nrows=2, ncols=2, figsize=(10, 8),
+                            gridspec_kw=dict(height_ratios=[0.8, 0.2],
+                            hspace=0.4, wspace=0.2, bottom=0.12, top=0.98,
+                            left=0.05, right=0.97))
+
+    pos = axs[1, 1].get_position()
+    yh = pos.bounds[-1]
+    yl = pos.bounds[1]
+    add_y = yh * 0.5
+    yl -= 0.25 * add_y
+    yh = yh + add_y*0.25
+    axs[1, 1].set_position([pos.bounds[0], yl, pos.bounds[2], yh])
+
+    color_list = [colors['hc'], colors['mid'], colors['subdiag'],
+                  colors['diag']]
+
+    # contrast
+    sns.violinplot(x=df['group'], y=df['AA'],
+                   palette=[color_list[0], color_list[-1]],
+                   linewidth=0, ax=axs[0, 0])
+    sns.swarmplot(x=df['group'], y=df['AA'], size=7,
+                  edgecolor="white", linewidth=1,
+                  palette=[color_list[0], color_list[-1]], ax=axs[0, 0])
+    axs[0, 0].set_ylabel('alpha asymmetry index')
+    axs[0, 0].set_xlabel('group')
+    axs[0, 0].set_yticklabels([])
+    axs[0, 0].set_xticklabels([])
+    axs[0, 0].tick_params(axis=u'both', which=u'both', length=0)
+
+    col = axs[0, 0].collections
+    col[0].set_alpha(0.2)
+    col[2].set_alpha(0.2)
+
+    # regression
+    sns.regplot(x=bdi['BDI-II'].values, y=bdi['y'].values, color=colors['mid'],
+                ax=axs[0, 1], scatter=True)
+
+    axs[0, 1].set_ylabel("")
+    axs[0, 1].set_yticklabels([])
+    axs[0, 1].set_xticklabels([])
+    axs[0, 1].tick_params(axis=u'both', which=u'both', length=0)
+
+    for msk, col in zip([hc, mid, sub, diag], color_list):
+        axs[0, 1].scatter(bdi[msk]['BDI-II'], bdi[msk]['y'],
+                          c=col, alpha=1, edgecolo='white', linewidth=1,
+                          zorder=4)
+
+    plt.rcParams.update({'font.size': 22})
+
+    plt.sca(axs[1, 0])
+    length_to_end = 50 - second_min_diag_bdi
+    rct1 = plt.Rectangle((0, -1), 5, 1, color=ds.colors['hc'], zorder=5)
+    rct2 = plt.Rectangle((second_min_diag_bdi, -1), length_to_end, 1,
+                         color=ds.colors['diag'], zorder=5)
+    rct3 = plt.Rectangle((0, -2.5), 5, 1, color=ds.colors['hc'], zorder=5)
+    rct4 = plt.Rectangle((10, -2.5), 40, 1,
+                         color=ds.colors['subdiag'], zorder=5)
+
+    for rct in [rct1, rct2, rct3, rct4]:
+        axs[1, 0].add_artist(rct)
+
+    axs[1, 0].set_xlim((0, 50))
+    axs[1, 0].set_ylim((-3, 0.5))
+    axs[1, 0].set_yticks([])
+    axs[1, 0].set_xticks([0, 10, 20, 30, 40, 50])
+    axs[1, 0].set_xticklabels([''] * 6)
+    axs[1, 0].xaxis.set_ticks_position('top')
+    axs[1, 0].set_xticklabels([0, 10, 20, 30, 40, 50])
+    axs[1, 0].xaxis.set_label_position('top')
+    axs[1, 0].set_xlabel('BDI')
+    axs[1, 0].set_ylabel('contrasts')
+    plt.grid(axis='x', zorder=-1)
+
+    plt.sca(axs[1, 1])
+    length_to_end = 50 - second_min_diag_bdi
+
+    rct1 = plt.Rectangle((0, -1.5), 5, 0.65, color=ds.colors['hc'], zorder=5)
+    rct2 = plt.Rectangle((5, -1.5), 5, 0.65, color=ds.colors['mid'], zorder=6)
+    rct4 = plt.Rectangle((10, -1.5), 40, 0.65, color=ds.colors['subdiag'],
+                         zorder=5)
+    rct3 = plt.Rectangle((0, -2.5), 5, 0.65, color=ds.colors['hc'], zorder=5)
+    rct5 = plt.Rectangle((10, -2.5), 40, 0.65, color=ds.colors['subdiag'],
+                         zorder=5)
+    rct6 = plt.Rectangle((5, -2.5), 5, 0.65, color=ds.colors['mid'], zorder=5)
+    rct7 = plt.Rectangle((second_min_diag_bdi, -2.5), length_to_end, 0.3,
+                         color=ds.colors['diag'], zorder=5)
+    rct8 = plt.Rectangle((second_min_diag_bdi, -0.5), length_to_end, 0.65,
+                         color=ds.colors['diag'], zorder=5)
+
+    for rct in [rct1, rct2, rct3, rct4, rct5, rct6, rct7, rct8]:
+        axs[1, 1].add_artist(rct)
+
+    axs[1, 1].set_xlim((0, 50))
+    axs[1, 1].set_ylim((-2.85, 0.5))
+    axs[1, 1].set_yticks([])
+    axs[1, 1].set_xticks([0, 10, 20, 30, 40, 50])
+    axs[1, 1].set_xticklabels([''] * 6)
+    axs[1, 1].xaxis.set_ticks_position('top')
+    axs[1, 1].set_xticklabels([0, 10, 20, 30, 40, 50])
+    axs[1, 1].set_ylabel('included\ndata')
+    axs[1, 1].xaxis.set_label_position('top')
+    axs[1, 1].set_xlabel('BDI')
+
+    plt.grid(axis='x', zorder=-1)
+
+    return fig
