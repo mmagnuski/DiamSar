@@ -180,7 +180,7 @@ def plot_multi_topo(psds_avg, info_frontal, info_asy):
     return fig
 
 
-def plot_swarm(df, ax=None):
+def plot_swarm(df, ax=None, ygrid=True):
     '''
     Swarmplot for single channel pairs asymmetry. Used for group contrast
     visualization.
@@ -192,8 +192,7 @@ def plot_swarm(df, ax=None):
     # swarmplot
     # ---------
     ax = sns.swarmplot("group", "asym", data=df, size=10,
-                       palette=[colors['diag'], colors['hc']], ax=ax)
-    sns.despine(ax=ax, trim=True)
+                       palette=[colors['diag'], colors['hc']], ax=ax, zorder=5)
 
     # add means and CIs
     # -----------------
@@ -206,12 +205,12 @@ def plot_swarm(df, ax=None):
         # plot mean
         this_mean = means.loc[this_label, 'asym']
         ax.plot([this_xpos - width, this_xpos + width], [this_mean, this_mean],
-                color=colors[this_label], lw=2.)
+                color=colors[this_label], lw=2.5, zorder=4)
         # add CI (currently standard error of the mean)
         df_sel = df.query('group == "{}"'.format(this_label))
         this_sem = sem(df_sel.asym.values)
         rct = plt.Rectangle((this_xpos - width, this_mean - this_sem),
-                            width * 2, this_sem * 2,
+                            width * 2, this_sem * 2, zorder=3,
                             facecolor=colors[this_label], alpha=0.3)
         ax.add_artist(rct)
 
@@ -226,10 +225,15 @@ def plot_swarm(df, ax=None):
         tck.set_fontsize(14)
 
     # change width of spine lines
+    sns.despine(ax=ax, trim=True)
     ax.spines['bottom'].set_linewidth(3)
     ax.spines['left'].set_linewidth(3)
     ax.xaxis.set_tick_params(width=3, length=6)
     ax.yaxis.set_tick_params(width=3, length=6)
+
+    if ygrid:
+        ax.yaxis.grid(color=[0.88, 0.88, 0.88], linewidth=2,
+                      zorder=0, linestyle='--')
 
     # t test value
     # ------------
