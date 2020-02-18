@@ -383,129 +383,123 @@ def bdi_bdi_histogram(bdi):
     return fig, ax
 
 
-def plot_panel(bdi, colors, hi):
+def plot_panel(bdi, bar_h=0.6, seed=22):
+    '''Plot contrast panels.'''
 
-    x, y = ['diag'], ['hc']
-    group = x*20 + y*20
+    # create variables
+    # ----------------
 
-    AA_diag = np.random.uniform(low=-2, high=0.75, size=20)
-    AA_diag = list(AA_diag)
-
-    AA_control = np.random.uniform(low=-1, high=1.5, size=20)
-    AA_control = list(AA_control)
-
-    d = {'group': group, 'asym': AA_diag + AA_control}
-    df = pd.DataFrame(d)
+    # dataframe
+    random_state = np.random.RandomState(seed)
+    AA_diag = random_state.uniform(low=-2, high=0.75, size=20)
+    AA_control = random_state.uniform(low=-1, high=1.5, size=20)
+    group = ['diag'] * 20 + ['hc'] * 20
+    data = {'group': group, 'asym': np.concatenate([AA_diag, AA_control])}
+    df = pd.DataFrame(data)
     df['group'] = df['group'].astype('category')
 
-    y = bdi['BDI-II'].values*0.1 + np.random.uniform(low=0, high=10,
-                                                     size=bdi.shape[0])
+    # regression data
+    noise = random_state.uniform(low=0, high=10, size=bdi.shape[0])
+    y = bdi['BDI-II'].values * 0.1 + noise
     bdi.loc[:, 'y'] = y
 
+    # regression groups
     diag = bdi.DIAGNOZA
     hc = ~diag & (bdi['BDI-II'] <= 5)
     mid = ~diag & (bdi['BDI-II'] > 5) & (bdi['BDI-II'] <= 10)
     sub = ~diag & (bdi['BDI-II'] > 10)
-    msk = bdi.DIAGNOZA
-    min_diag_bdi = bdi.loc[msk, 'BDI-II'].min()
-    msk2 = msk & (bdi['BDI-II'] > min_diag_bdi)
+
+    # range of BDI values
+    min_diag_bdi = bdi.loc[diag, 'BDI-II'].min()
+    msk2 = diag & (bdi['BDI-II'] > min_diag_bdi)
     second_min_diag_bdi = bdi.loc[msk2, 'BDI-II'].min()
 
-    fig, axs = plt.subplots(nrows=2, ncols=2, figsize=(10, 8),
-                            gridspec_kw=dict(height_ratios=[0.6, 0.4],
-                            hspace=0.25, wspace=0.35, bottom=0.12, top=0.98,
-                            left=0.1, right=0.97))
+    # prepare figure
+    # --------------
+    grid = dict(height_ratios=[0.55, 0.45], hspace=0.75, wspace=0.35,
+                bottom=0.1, top=0.98, left=0.14, right=0.97)
+    fig, axs = plt.subplots(nrows=2, ncols=2, figsize=(12, 8),
+                            gridspec_kw=grid)
 
-    pos = axs[1, 1].get_position()
-    yh = pos.bounds[-1]
-    yl = pos.bounds[1]
-    add_y = yh * 0.5
-    yl -= 0.25 * add_y
-    yh = yh + add_y*0.25
-    axs[1, 1].set_position([pos.bounds[0], yl, pos.bounds[2], yh])
-
-    color_list = [colors['hc'], colors['mid'], colors['subdiag'],
-                  colors['diag']]
+    # plot contrasts examples
+    # -----------------------
 
     # contrast
-    ds.viz.plot_swarm(df, axes=axs[0, 0])
+    plot_swarm(df, ax=axs[0, 0])
 
     # regression
     sns.regplot(x=bdi['BDI-II'].values, y=bdi['y'].values, color=colors['mid'],
                 ax=axs[0, 1], scatter=True, scatter_kws={'s': 0})
 
-    axs[0, 1].set_ylabel("")
-    axs[0, 1].set_yticklabels([])
-    axs[0, 1].set_xticklabels([])
-    axs[0, 1].tick_params(axis=u'both', which=u'both', length=0)
-
+    # add group-colored scatter to regression plot
+    color_list = [colors['hc'], colors['mid'], colors['subdiag'],
+                  colors['diag']]
     for msk, col in zip([hc, mid, sub, diag], color_list):
-        axs[0, 1].scatter(bdi[msk]['BDI-II'], bdi[msk]['y'],
-                          c=col, alpha=0.7, edgecolor='white', linewidth=0,
+        axs[0, 1].scatter(bdi[msk]['BDI-II'], bdi[msk]['y'], alpha=0.7,
+                          c=col[np.newaxis, :], edgecolor='white', linewidth=0,
                           zorder=4, s=100)
 
-    plt.rcParams.update({'font.size': 17})
-
-    plt.sca(axs[1, 0])
+    # prepare contrast legend vars
+    # ----------------------------
+    cntr1, cntr2, cntr3 = -1, -2, 0
+    bar1y, bar2y, bar3y = [c - bar_h / 2 for c in [cntr1, cntr2, cntr3]]
     length_to_end = 50 - second_min_diag_bdi
 
-    cntr1 = -1
-    cntr2 = -2
-    bar1y = cntr1 - hi/2
-    bar2y = cntr2 - hi/2
-    bar3y = 0 - hi/2
-
-    rct1 = plt.Rectangle((0, bar1y), 5, hi, color=ds.colors['hc'], zorder=5)
-    rct2 = plt.Rectangle((second_min_diag_bdi, bar1y), length_to_end, hi,
-                         color=ds.colors['diag'], zorder=5)
-    rct3 = plt.Rectangle((0, bar2y), 5, hi, color=ds.colors['hc'], zorder=5)
-    rct4 = plt.Rectangle((10, bar2y), 40, hi,
-                         color=ds.colors['subdiag'], zorder=5)
-
-    for rct in [rct1, rct2, rct3, rct4]:
+    # group contrast legends
+    # ----------------------
+    rectanges = _create_group_rectangles(
+        bar1y, bar2y, bar_h, second_min_diag_bdi, length_to_end)
+    for rct in rectanges:
         axs[1, 0].add_artist(rct)
 
-    axs[1, 0].set_xlim((0, 50))
-    axs[1, 0].set_ylim((-2.5, -0.5))
-    axs[1, 0].set_yticks([-2, -1])
-    axs[1, 0].set_yticklabels(['SvsHC', 'DvsHC'])
-    axs[1, 0].set_xticks([0, 10, 20, 30, 40, 50])
-    axs[1, 0].set_xticklabels([''] * 6)
-    axs[1, 0].set_xticklabels([0, 10, 20, 30, 40, 50])
-    axs[1, 0].set_xlabel('BDI')
-    axs[1, 0].set_ylabel('')
-    plt.grid(axis='x', zorder=-1)
-
-    plt.sca(axs[1, 1])
-    length_to_end = 50 - second_min_diag_bdi
-
-    rct1 = plt.Rectangle((0, bar1y), 5, hi, color=ds.colors['hc'], zorder=5)
-    rct2 = plt.Rectangle((5, bar1y), 5, hi, color=ds.colors['mid'], zorder=6)
-    rct4 = plt.Rectangle((10, bar1y), 40, hi, color=ds.colors['subdiag'],
-                         zorder=5)
-    rct3 = plt.Rectangle((0, bar2y), 5, hi, color=ds.colors['hc'], zorder=5)
-    rct5 = plt.Rectangle((10, bar2y), 40, hi, color=ds.colors['subdiag'],
-                         zorder=5)
-    rct6 = plt.Rectangle((5, bar2y), 5, hi, color=ds.colors['mid'], zorder=5)
-    rct7 = plt.Rectangle((second_min_diag_bdi, bar2y), length_to_end, hi/2,
-                         color=ds.colors['diag'], zorder=5)
-    rct8 = plt.Rectangle((second_min_diag_bdi, bar3y), length_to_end, hi,
-                         color=ds.colors['diag'], zorder=5)
-
-    for rct in [rct1, rct2, rct3, rct4, rct5, rct6, rct7, rct8]:
+    # regression contrast legends
+    # ---------------------------
+    rectanges = _create_regression_rectanges(
+        bar1y, bar2y, bar3y, bar_h, length_to_end, second_min_diag_bdi)
+    for rct in rectanges:
         axs[1, 1].add_artist(rct)
 
-    axs[1, 1].set_xlim((0, 50))
-    axs[1, 1].set_ylim((-2.75, 0.75))
-    axs[1, 1].set_yticks([-2, -1, 0])
-    axs[1, 1].set_xticks([0, 10, 20, 30, 40, 50])
-    axs[1, 1].set_yticklabels(['allReg', 'nonDReg', 'Dreg'])
-    axs[1, 1].set_xticklabels([''] * 6)
-    axs[1, 1].set_xticklabels([0, 10, 20, 30, 40, 50])
-    axs[1, 1].set_ylabel('')
-    axs[1, 1].set_xlabel('BDI')
+    # aesthetics
+    # ----------
+    axs[0, 1].set_ylabel("")
+    axs[0, 1].set_xticklabels([])
+    axs[0, 1].set_xlabel('BDI')
 
-    plt.grid(axis='x', zorder=-1)
+    for ax in axs[0, :]:
+        # equal tick spacing through data range
+        ylm = ax.get_ylim()
+        new_ticks = np.linspace(ylm[0], ylm[1], 5)
+        ax.set_yticks(new_ticks)
+        ax.set_yticklabels([])
+
+        # nice axis spines
+        axis_frame_aes(ax, ygrid=True)
+
+    for ax in axs[1, :]:
+        # limits, labels and ticks
+        ax.set_xlim((0, 50))
+        ax.set_xlabel('BDI')
+        ax.set_ylabel('')
+        ax.set_xticks([0, 10, 20, 30, 40, 50])
+
+        # tick labels fontsize
+        for axside in [ax.xaxis, ax.yaxis]:
+            for tck in axside.get_majorticklabels():
+                tck.set_fontsize(17)
+
+        # add grid
+        ax.xaxis.grid(color=[0.88, 0.88, 0.88], linewidth=2,
+                      zorder=0, linestyle='--')
+
+    axs[1, 0].set_ylim((-2.5, -0.5))
+    axs[1, 0].set_yticks([cntr2, cntr1])
+    axs[1, 0].set_yticklabels(['SvsHC', 'DvsHC'])
+
+    axs[1, 1].set_ylim((-2.75, 0.75))
+    axs[1, 1].set_yticks([cntr2, cntr1, cntr3])
+    axs[1, 1].set_yticklabels(['allReg', 'nonDReg', 'DReg'])
+
+    return fig
 
 
 def src_plot(clst, cluster_idx=0, azimuth_pos = [35, 125]):
@@ -542,3 +536,31 @@ def src_plot(clst, cluster_idx=0, azimuth_pos = [35, 125]):
         this_ax.set_axis_off()
 
     return fig
+
+
+def _create_regression_rectanges(bar1y, bar2y, bar3y, bar_h, length_to_end,
+                                 second_min_diag_bdi):
+    rct1 = plt.Rectangle((0, bar1y), 5, bar_h, color=colors['hc'], zorder=5)
+    rct2 = plt.Rectangle((5, bar1y), 5, bar_h, color=colors['mid'], zorder=6)
+    rct4 = plt.Rectangle((10, bar1y), 40, bar_h, color=colors['subdiag'],
+                         zorder=5)
+    rct3 = plt.Rectangle((0, bar2y), 5, bar_h, color=colors['hc'], zorder=5)
+    rct5 = plt.Rectangle((10, bar2y), 40, bar_h, color=colors['subdiag'],
+                         zorder=5)
+    rct6 = plt.Rectangle((5, bar2y), 5, bar_h, color=colors['mid'], zorder=5)
+    rct7 = plt.Rectangle((second_min_diag_bdi, bar2y), length_to_end,
+                         bar_h / 2, color=colors['diag'], zorder=5)
+    rct8 = plt.Rectangle((second_min_diag_bdi, bar3y), length_to_end, bar_h,
+                         color=colors['diag'], zorder=5)
+    return [rct1, rct2, rct3, rct4, rct5, rct6, rct7, rct8]
+
+
+def _create_group_rectangles(bar1y, bar2y, bar_h, second_min_diag_bdi,
+                             length_to_end):
+    rct1 = plt.Rectangle((0, bar1y), 5, bar_h, color=colors['hc'], zorder=5)
+    rct2 = plt.Rectangle((second_min_diag_bdi, bar1y), length_to_end, bar_h,
+                         color=colors['diag'], zorder=5)
+    rct3 = plt.Rectangle((0, bar2y), 5, bar_h, color=colors['hc'], zorder=5)
+    rct4 = plt.Rectangle((10, bar2y), 40, bar_h,
+                         color=colors['subdiag'], zorder=5)
+    return [rct1, rct2, rct3, rct4]
