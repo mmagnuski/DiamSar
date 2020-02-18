@@ -8,19 +8,15 @@ from borsar.stats import format_pvalue
 from borsar.viz import Topo
 
 from sarna.viz import prepare_equal_axes
-<<<<<<< HEAD
 
 from . import freq
 from .analysis import load_stat
 from .utils import colors
 
-
-=======
 from DiamSar.analysis import load_stat
 from DiamSar.utils import colors
 from DiamSar import freq
 import DiamSar as ds
->>>>>>> 7e776b1... add plot_panel
 
 # - [ ] change to use Info
 # - [ ] make sure Info in .get_data() are cached
@@ -334,9 +330,9 @@ def bdi_bdi_histogram(bdi):
     return fig, ax
 
 
-def plot_panel(bdi, colors):
+def plot_panel(bdi, colors, hi):
 
-    x, y = ['diag'], ['control']
+    x, y = ['diag'], ['hc']
     group = x*20 + y*20
 
     AA_diag = np.random.uniform(low=-2, high=0.75, size=20)
@@ -345,7 +341,7 @@ def plot_panel(bdi, colors):
     AA_control = np.random.uniform(low=-1, high=1.5, size=20)
     AA_control = list(AA_control)
 
-    d = {'group': group, 'AA': AA_diag + AA_control}
+    d = {'group': group, 'asym': AA_diag + AA_control}
     df = pd.DataFrame(d)
     df['group'] = df['group'].astype('category')
 
@@ -363,9 +359,9 @@ def plot_panel(bdi, colors):
     second_min_diag_bdi = bdi.loc[msk2, 'BDI-II'].min()
 
     fig, axs = plt.subplots(nrows=2, ncols=2, figsize=(10, 8),
-                            gridspec_kw=dict(height_ratios=[0.8, 0.2],
-                            hspace=0.4, wspace=0.2, bottom=0.12, top=0.98,
-                            left=0.05, right=0.97))
+                            gridspec_kw=dict(height_ratios=[0.6, 0.4],
+                            hspace=0.25, wspace=0.35, bottom=0.12, top=0.98,
+                            left=0.1, right=0.97))
 
     pos = axs[1, 1].get_position()
     yh = pos.bounds[-1]
@@ -379,25 +375,11 @@ def plot_panel(bdi, colors):
                   colors['diag']]
 
     # contrast
-    sns.violinplot(x=df['group'], y=df['AA'],
-                   palette=[color_list[0], color_list[-1]],
-                   linewidth=0, ax=axs[0, 0])
-    sns.swarmplot(x=df['group'], y=df['AA'], size=7,
-                  edgecolor="white", linewidth=1,
-                  palette=[color_list[0], color_list[-1]], ax=axs[0, 0])
-    axs[0, 0].set_ylabel('alpha asymmetry index')
-    axs[0, 0].set_xlabel('group')
-    axs[0, 0].set_yticklabels([])
-    axs[0, 0].set_xticklabels([])
-    axs[0, 0].tick_params(axis=u'both', which=u'both', length=0)
-
-    col = axs[0, 0].collections
-    col[0].set_alpha(0.2)
-    col[2].set_alpha(0.2)
+    ds.viz.plot_swarm(df, axes=axs[0, 0])
 
     # regression
     sns.regplot(x=bdi['BDI-II'].values, y=bdi['y'].values, color=colors['mid'],
-                ax=axs[0, 1], scatter=True)
+                ax=axs[0, 1], scatter=True, scatter_kws={'s': 0})
 
     axs[0, 1].set_ylabel("")
     axs[0, 1].set_yticklabels([])
@@ -406,63 +388,68 @@ def plot_panel(bdi, colors):
 
     for msk, col in zip([hc, mid, sub, diag], color_list):
         axs[0, 1].scatter(bdi[msk]['BDI-II'], bdi[msk]['y'],
-                          c=col, alpha=1, edgecolo='white', linewidth=1,
-                          zorder=4)
+                          c=col, alpha=0.7, edgecolor='white', linewidth=0,
+                          zorder=4, s=100)
 
-    plt.rcParams.update({'font.size': 22})
+    plt.rcParams.update({'font.size': 17})
 
     plt.sca(axs[1, 0])
     length_to_end = 50 - second_min_diag_bdi
-    rct1 = plt.Rectangle((0, -1), 5, 1, color=ds.colors['hc'], zorder=5)
-    rct2 = plt.Rectangle((second_min_diag_bdi, -1), length_to_end, 1,
+
+    cntr1 = -1
+    cntr2 = -2
+    bar1y = cntr1 - hi/2
+    bar2y = cntr2 - hi/2
+    bar3y = 0 - hi/2
+
+    rct1 = plt.Rectangle((0, bar1y), 5, hi, color=ds.colors['hc'], zorder=5)
+    rct2 = plt.Rectangle((second_min_diag_bdi, bar1y), length_to_end, hi,
                          color=ds.colors['diag'], zorder=5)
-    rct3 = plt.Rectangle((0, -2.5), 5, 1, color=ds.colors['hc'], zorder=5)
-    rct4 = plt.Rectangle((10, -2.5), 40, 1,
+    rct3 = plt.Rectangle((0, bar2y), 5, hi, color=ds.colors['hc'], zorder=5)
+    rct4 = plt.Rectangle((10, bar2y), 40, hi,
                          color=ds.colors['subdiag'], zorder=5)
 
     for rct in [rct1, rct2, rct3, rct4]:
         axs[1, 0].add_artist(rct)
 
     axs[1, 0].set_xlim((0, 50))
-    axs[1, 0].set_ylim((-3, 0.5))
-    axs[1, 0].set_yticks([])
+    axs[1, 0].set_ylim((-2.5, -0.5))
+    axs[1, 0].set_yticks([-2, -1])
+    axs[1, 0].set_yticklabels(['SvsHC', 'DvsHC'])
     axs[1, 0].set_xticks([0, 10, 20, 30, 40, 50])
     axs[1, 0].set_xticklabels([''] * 6)
-    axs[1, 0].xaxis.set_ticks_position('top')
     axs[1, 0].set_xticklabels([0, 10, 20, 30, 40, 50])
-    axs[1, 0].xaxis.set_label_position('top')
     axs[1, 0].set_xlabel('BDI')
-    axs[1, 0].set_ylabel('contrasts')
+    axs[1, 0].set_ylabel('')
     plt.grid(axis='x', zorder=-1)
 
     plt.sca(axs[1, 1])
     length_to_end = 50 - second_min_diag_bdi
 
-    rct1 = plt.Rectangle((0, -1.5), 5, 0.65, color=ds.colors['hc'], zorder=5)
-    rct2 = plt.Rectangle((5, -1.5), 5, 0.65, color=ds.colors['mid'], zorder=6)
-    rct4 = plt.Rectangle((10, -1.5), 40, 0.65, color=ds.colors['subdiag'],
+    rct1 = plt.Rectangle((0, bar1y), 5, hi, color=ds.colors['hc'], zorder=5)
+    rct2 = plt.Rectangle((5, bar1y), 5, hi, color=ds.colors['mid'], zorder=6)
+    rct4 = plt.Rectangle((10, bar1y), 40, hi, color=ds.colors['subdiag'],
                          zorder=5)
-    rct3 = plt.Rectangle((0, -2.5), 5, 0.65, color=ds.colors['hc'], zorder=5)
-    rct5 = plt.Rectangle((10, -2.5), 40, 0.65, color=ds.colors['subdiag'],
+    rct3 = plt.Rectangle((0, bar2y), 5, hi, color=ds.colors['hc'], zorder=5)
+    rct5 = plt.Rectangle((10, bar2y), 40, hi, color=ds.colors['subdiag'],
                          zorder=5)
-    rct6 = plt.Rectangle((5, -2.5), 5, 0.65, color=ds.colors['mid'], zorder=5)
-    rct7 = plt.Rectangle((second_min_diag_bdi, -2.5), length_to_end, 0.3,
+    rct6 = plt.Rectangle((5, bar2y), 5, hi, color=ds.colors['mid'], zorder=5)
+    rct7 = plt.Rectangle((second_min_diag_bdi, bar2y), length_to_end, hi/2,
                          color=ds.colors['diag'], zorder=5)
-    rct8 = plt.Rectangle((second_min_diag_bdi, -0.5), length_to_end, 0.65,
+    rct8 = plt.Rectangle((second_min_diag_bdi, bar3y), length_to_end, hi,
                          color=ds.colors['diag'], zorder=5)
 
     for rct in [rct1, rct2, rct3, rct4, rct5, rct6, rct7, rct8]:
         axs[1, 1].add_artist(rct)
 
     axs[1, 1].set_xlim((0, 50))
-    axs[1, 1].set_ylim((-2.85, 0.5))
-    axs[1, 1].set_yticks([])
+    axs[1, 1].set_ylim((-2.75, 0.75))
+    axs[1, 1].set_yticks([-2, -1, 0])
     axs[1, 1].set_xticks([0, 10, 20, 30, 40, 50])
+    axs[1, 1].set_yticklabels(['allReg', 'nonDReg', 'Dreg'])
     axs[1, 1].set_xticklabels([''] * 6)
-    axs[1, 1].xaxis.set_ticks_position('top')
     axs[1, 1].set_xticklabels([0, 10, 20, 30, 40, 50])
-    axs[1, 1].set_ylabel('included\ndata')
-    axs[1, 1].xaxis.set_label_position('top')
+    axs[1, 1].set_ylabel('')
     axs[1, 1].set_xlabel('BDI')
 
     plt.grid(axis='x', zorder=-1)
