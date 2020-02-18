@@ -191,7 +191,7 @@ def plot_swarm(df, ax=None, ygrid=True):
     visualization.
     '''
     if ax is None:
-        gridspec = dict(bottom=0.12, top=0.95, left=0.14, right=0.99)
+        gridspec = dict(bottom=0.2, top=0.92, left=0.2, right=0.99)
         fig, ax = plt.subplots(figsize=(8, 6), gridspec_kw=gridspec)
 
     # swarmplot
@@ -221,6 +221,8 @@ def plot_swarm(df, ax=None, ygrid=True):
 
     # axis and tick labels
     # --------------------
+    sns.despine(ax=ax, trim=False, offset=25)
+    trim_y(ax)
     ax.set_ylabel('alpha asymmetry', fontsize=20)
     ax.set_xticklabels(['diagnosed', 'healthy\ncontrols'],
                        fontsize=20)
@@ -230,11 +232,11 @@ def plot_swarm(df, ax=None, ygrid=True):
         tck.set_fontsize(14)
 
     # change width of spine lines
-    sns.despine(ax=ax, trim=True)
-    ax.spines['bottom'].set_linewidth(3)
-    ax.spines['left'].set_linewidth(3)
-    ax.xaxis.set_tick_params(width=3, length=6)
-    ax.yaxis.set_tick_params(width=3, length=6)
+    axline_width = 2
+    ax.spines['bottom'].set_linewidth(axline_width)
+    ax.spines['left'].set_linewidth(axline_width)
+    ax.xaxis.set_tick_params(width=axline_width, length=8)
+    ax.yaxis.set_tick_params(width=axline_width, length=8)
 
     if ygrid:
         ax.yaxis.grid(color=[0.88, 0.88, 0.88], linewidth=2,
@@ -247,6 +249,20 @@ def plot_swarm(df, ax=None, ygrid=True):
     # 2. format text: 't = {:.2f}, p = {:.2f}'.format(t, p)
     # 3. plot text with matplotlib
     return ax
+
+
+def trim_y(ax):
+    yticks = ax.get_yticks()
+    if yticks.size:
+        firsttick = np.compress(yticks >= min(ax.get_ylim()),
+                                yticks)[0]
+        lasttick = np.compress(yticks <= max(ax.get_ylim()),
+                               yticks)[-1]
+        ax.spines['left'].set_bounds(firsttick, lasttick)
+        ax.spines['right'].set_bounds(firsttick, lasttick)
+        newticks = yticks.compress(yticks <= lasttick)
+        newticks = newticks.compress(newticks >= firsttick)
+        ax.set_yticks(newticks)
 
 
 # FIXME - maybe change to the actual grid used in the paper?
@@ -281,12 +297,10 @@ def create_swarm_df(psd_high, psd_low):
 def plot_heatmap_add1(clst):
     '''Plot results of Standardized Analyses (ADD1) with heatmap and topo.'''
     fig = plt.figure(figsize=(10, 10))
-    gs = fig.add_gridspec(3, 2, hspace=0.5, top=0.95, bottom=0.05,
-                          left=0.07)
-
-    f_ax1 = fig.add_subplot(gs[:2, :])
-    f_ax2 = fig.add_subplot(gs[2, 0])
-    f_ax3 = fig.add_subplot(gs[2, 1])
+    gs = fig.add_gridspec(2, 2, hspace=0.5, top=0.95, bottom=0.05, left=0.07)
+    f_ax1 = fig.add_subplot(gs[0, :])
+    f_ax2 = fig.add_subplot(gs[1, 0])
+    f_ax3 = fig.add_subplot(gs[1, 1])
 
     clst_idx = [0, 1] if len(clst) > 1 else None
     clst.plot(dims=['chan', 'freq'], cluster_idx=clst_idx, axis=f_ax1,
@@ -323,15 +337,14 @@ def plot_heatmap_add1(clst):
         idx1, idx2 = 1, 0
 
     # topo 1
-    tp1 = clst.plot(cluster_idx=idx1, freq=freqs1, axes=f_ax2,
-                    vmin=-4, vmax=4, mark_clst_prop=0.3,
-                    border='mean')
+    mark_kwargs = {'markersize': 10}
+    topo_args = dict(vmin=-4, vmax=4, mark_clst_prop=0.3,
+                     mark_kwargs=mark_kwargs, border='mean')
+    tp1 = clst.plot(cluster_idx=idx1, freq=freqs1, axes=f_ax2, **topo_args)
     tp1.axes.set_title(freqlabel1, fontsize=16)
 
     # topo 2
-    tp2 = clst.plot(cluster_idx=idx2, freq=freqs2, axes=f_ax3,
-                    vmin=-4, vmax=4, mark_clst_prop=0.3,
-                    border='mean')
+    tp2 = clst.plot(cluster_idx=idx2, freq=freqs2, axes=f_ax3, **topo_args)
     tp2.axes.set_title(freqlabel2, fontsize=16)
 
     obj_dict = {'heatmap': f_ax1, 'colorbar': cbar_ax, 'topo1': tp1,
@@ -491,5 +504,39 @@ def plot_panel(bdi, colors, hi):
     axs[1, 1].set_xlabel('BDI')
 
     plt.grid(axis='x', zorder=-1)
+
+
+def src_plot(clst, cluster_idx=0, azimuth_pos = [35, 125]):
+    '''Plot source-level clusters as multi-axis images.
+
+    Parameters
+    ----------
+    clst : borsar.cluster.Clusters
+        Cluster results to plot.
+    cluster_idx : int
+        Cluster to plot.
+    azimuth_pos : list of int
+        List of two azimuth position of the brain images.
+
+    Returns
+    -------
+    fig : matplotlib figure
+        Matplotlib figure with images.'''
+    clst.plot(cluster_idx=cluster_idx)
+
+    imgs = list()
+    for azi in azimuth_pos:
+        mlab.view(azimuth=azi)
+        img = mlab.screenshot(antialiased=True)
+        imgs.append(img)
+    mlab.close()
+
+    gridspec = {'hspace': 0.1, 'wspace': 0.1, 'left': 0.025, 'right': 0.975,
+                'top': 0.95, 'bottom': 0.05}
+    fig, ax = plt.subplots(ncols=2, figsize=(12, 6), gridspec_kw=gridspec)
+
+    for this_ax, this_img in zip(ax, imgs):
+        this_ax.imshow(this_img)
+        this_ax.set_axis_off()
 
     return fig
