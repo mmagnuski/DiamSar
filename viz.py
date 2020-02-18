@@ -18,6 +18,7 @@ from DiamSar.utils import colors
 from DiamSar import freq
 import DiamSar as ds
 
+
 # - [ ] change to use Info
 # - [ ] make sure Info in .get_data() are cached
 
@@ -184,13 +185,22 @@ def plot_multi_topo(psds_avg, info_frontal, info_asy):
     return fig
 
 
-def plot_swarm(df, axes=None):
+def plot_swarm(df, ax=None, ygrid=True):
     '''
     Swarmplot for single channel pairs asymmetry. Used for group contrast
     visualization.
     '''
+    if ax is None:
+        gridspec = dict(bottom=0.12, top=0.95, left=0.14, right=0.99)
+        fig, ax = plt.subplots(figsize=(8, 6), gridspec_kw=gridspec)
+
+    # swarmplot
+    # ---------
     ax = sns.swarmplot("group", "asym", data=df, size=10,
-                       palette=[colors['diag'], colors['hc']], ax=axes)
+                       palette=[colors['diag'], colors['hc']], ax=ax, zorder=5)
+
+    # add means and CIs
+    # -----------------
     means = df.groupby('group').mean()
     x_pos = ax.get_xticks()
     x_lab = [x.get_text() for x in ax.get_xticklabels()]
@@ -200,18 +210,42 @@ def plot_swarm(df, axes=None):
         # plot mean
         this_mean = means.loc[this_label, 'asym']
         ax.plot([this_xpos - width, this_xpos + width], [this_mean, this_mean],
-                color=colors[this_label], lw=2.)
+                color=colors[this_label], lw=2.5, zorder=4)
         # add CI (currently standard error of the mean)
-        this_sem = sem(df.query('group == "{}"'.format(this_label)).asym.values)
+        df_sel = df.query('group == "{}"'.format(this_label))
+        this_sem = sem(df_sel.asym.values)
         rct = plt.Rectangle((this_xpos - width, this_mean - this_sem),
-                            width * 2, this_sem * 2,
+                            width * 2, this_sem * 2, zorder=3,
                             facecolor=colors[this_label], alpha=0.3)
         ax.add_artist(rct)
 
+    # axis and tick labels
+    # --------------------
     ax.set_ylabel('alpha asymmetry', fontsize=20)
     ax.set_xticklabels(['diagnosed', 'healthy\ncontrols'],
                        fontsize=20)
     ax.set_xlabel('')
+
+    for tck in ax.yaxis.get_majorticklabels():
+        tck.set_fontsize(14)
+
+    # change width of spine lines
+    sns.despine(ax=ax, trim=True)
+    ax.spines['bottom'].set_linewidth(3)
+    ax.spines['left'].set_linewidth(3)
+    ax.xaxis.set_tick_params(width=3, length=6)
+    ax.yaxis.set_tick_params(width=3, length=6)
+
+    if ygrid:
+        ax.yaxis.grid(color=[0.88, 0.88, 0.88], linewidth=2,
+                      zorder=0, linestyle='--')
+
+    # t test value
+    # ------------
+    # ...
+    # 1. t, p = ttest_ind(df.query(...), df.query(...))
+    # 2. format text: 't = {:.2f}, p = {:.2f}'.format(t, p)
+    # 3. plot text with matplotlib
     return ax
 
 
@@ -222,15 +256,10 @@ def plot_swarm_grid(study, space, contrast):
     psd_high, psd_low, ch_names = freq.get_psds(selection='asy_pairs',
                                                 **psd_params)
 
-    df_list = list()
-    groups = ['diag'] * psd_high.shape[0] + ['hc'] * psd_low.shape[0]
-    for ar in [0, 1]:
-        data = np.concatenate([psd_high[:, ar], psd_low[:, ar]])
-        df_list.append(pd.DataFrame(data={'asym': data, 'group': groups}))
-
-    gridspec = dict(hspace=0.05, wspace=0.25, bottom=0.05, top=0.9,
-                    left=0.07, right=0.85)
-    fig, axs = plt.subplots(ncols=2, figsize=(17, 5), gridspec_kw=gridspec)
+    df_list = create_swarm_df(psd_high, psd_low)
+    gridspec = dict(hspace=0.05, wspace=0.25, bottom=0.12, top=0.9,
+                    left=0.07, right=0.95)
+    fig, axs = plt.subplots(ncols=2, figsize=(10, 6), gridspec_kw=gridspec)
 
     for idx, df in enumerate(df_list):
         plot_swarm(df, axes=axs[idx])
@@ -238,6 +267,15 @@ def plot_swarm_grid(study, space, contrast):
         axs[idx].set_title(ch_name, fontsize=22)
 
     return fig
+
+
+def create_swarm_df(psd_high, psd_low):
+    df_list = list()
+    groups = ['diag'] * psd_high.shape[0] + ['hc'] * psd_low.shape[0]
+    for ar in [0, 1]:
+        data = np.concatenate([psd_high[:, ar], psd_low[:, ar]])
+        df_list.append(pd.DataFrame(data={'asym': data, 'group': groups}))
+    return df_list
 
 
 def plot_heatmap_add1(clst):

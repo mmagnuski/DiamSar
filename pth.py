@@ -73,7 +73,8 @@ def set_paths(base_dir=None):
         # task-specific
         for task in ['rest']:
             paths.add_path('eeg', translate[task] + '_clean_exported',
-                           study='B', task=task, relative_to='eeg')
+                           study='B', task=task, relative_to='eeg',
+                           validate=False)
 
     # study A
     # -------
@@ -91,7 +92,7 @@ def set_paths(base_dir=None):
     for study, has_study in zip(['A', 'B'], [has_A, has_B]):
         if has_study:
             paths.add_path('chanpos', 'chanpos', study=study,
-                           relative_to='eeg')
+                           relative_to='eeg', validate=False)
 
     # study C has slightly different dir structure
     paths.add_path('chanpos', 'chanpos', study='C', relative_to='base_eeg')
