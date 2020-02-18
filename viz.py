@@ -13,11 +13,6 @@ from . import freq
 from .analysis import load_stat
 from .utils import colors
 
-from DiamSar.analysis import load_stat
-from DiamSar.utils import colors
-from DiamSar import freq
-import DiamSar as ds
-
 
 # - [ ] change to use Info
 # - [ ] make sure Info in .get_data() are cached
@@ -205,7 +200,7 @@ def plot_swarm(df, ax=None, ygrid=True):
     x_pos = ax.get_xticks()
     x_lab = [x.get_text() for x in ax.get_xticklabels()]
     width = np.diff(x_pos)[0] * 0.2
-# plot mean
+
     for this_label, this_xpos in zip(x_lab, x_pos):
         # plot mean
         this_mean = means.loc[this_label, 'asym']
@@ -221,12 +216,25 @@ def plot_swarm(df, ax=None, ygrid=True):
 
     # axis and tick labels
     # --------------------
-    sns.despine(ax=ax, trim=False, offset=25)
-    trim_y(ax)
     ax.set_ylabel('alpha asymmetry', fontsize=20)
     ax.set_xticklabels(['diagnosed', 'healthy\ncontrols'],
                        fontsize=20)
     ax.set_xlabel('')
+    axis_frame_aes(ax, ygrid=ygrid)
+
+    # t test value
+    # ------------
+    # ...
+    # 1. t, p = ttest_ind(df.query(...), df.query(...))
+    # 2. format text: 't = {:.2f}, p = {:.2f}'.format(t, p)
+    # 3. plot text with matplotlib
+    return ax
+
+
+def axis_frame_aes(ax, ygrid=True):
+    '''Nice axis spines.'''
+    sns.despine(ax=ax, trim=False, offset=25)
+    _trim_y(ax)
 
     for tck in ax.yaxis.get_majorticklabels():
         tck.set_fontsize(14)
@@ -242,16 +250,15 @@ def plot_swarm(df, ax=None, ygrid=True):
         ax.yaxis.grid(color=[0.88, 0.88, 0.88], linewidth=2,
                       zorder=0, linestyle='--')
 
-    # t test value
-    # ------------
-    # ...
-    # 1. t, p = ttest_ind(df.query(...), df.query(...))
-    # 2. format text: 't = {:.2f}, p = {:.2f}'.format(t, p)
-    # 3. plot text with matplotlib
-    return ax
 
+def _trim_y(ax):
+    '''
+    Trim only y axis.
 
-def trim_y(ax):
+    This is a slightly modified code copied from seaborn.
+    Seaborn's despine function allows only to trim both axes so we needed a
+    workaround.
+    '''
     yticks = ax.get_yticks()
     if yticks.size:
         firsttick = np.compress(yticks >= min(ax.get_ylim()),
