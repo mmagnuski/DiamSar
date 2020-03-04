@@ -129,55 +129,52 @@ def plot_grid_cluster(stats_clst, contrast, vlim=3):
 
 def plot_multi_topo(psds_avg, info_frontal, info_asy):
     '''Creating combined Topo object for multiple psds'''
-    gridspec = dict(height_ratios=[0.5, 0.5],
-                    width_ratios=[0.47, 0.47, 0.06],
-                    hspace=0.05, wspace=0.4,
-                    bottom=0.05, top=0.95, left=0.07, right=0.85)
-
-    fig, axs = plt.subplots(nrows=2, ncols=3, figsize=(10, 7.5),
-                            gridspec_kw=gridspec)
+    axis_limit = 2.25
+    fig = plt.figure(figsize=(7, 6))
+    axs = prepare_equal_axes(fig, [2, 2], space=[0.12, 0.8, 0.02, 0.85],
+                             h_dist=0.05, w_dist=0.05)
 
     topos = list()
     topomap_args = dict(extrapolate='head', outlines='skirt', border='mean')
 
     for val, ax in zip(psds_avg[:2], axs[0, :]):
-        topos.append(Topo(val, info_frontal, cmap='Reds', vmin=-28,
-                          vmax=-26, axes=ax, **topomap_args))
+        topos.append(Topo(val, info_frontal, cmap='Reds', vmin=-28, vmax=-26,
+                          axes=ax, **topomap_args))
 
     for val, ax in zip(psds_avg[2:], axs[1, :]):
-        topos.append(Topo(val, info_asy, cmap='RdBu_r', vmin=-0.13,
-                          vmax=0.13, axes=ax, show=False,
-                          **topomap_args))
+        topos.append(Topo(val, info_asy, cmap='RdBu_r', vmin=-0.3, vmax=0.3,
+                          axes=ax, show=False, **topomap_args))
 
     for tp in topos:
         tp.solid_lines()
+        tp.axes.scatter(*tp.chan_pos.T, facecolor='k', s=8)
 
-    cbar1 = plt.colorbar(axs[0, 0].images[0], cax=axs[0, 2])
-    plt.colorbar(axs[1, 0].images[0], cax=axs[1, 2])
-    tck = cbar1.get_ticks()
-    cbar1.set_ticks(tck[::2])
-    # tck_lab = cbar1.get_ticklabels()
-    # cbar1.set_ticklabels(tck_lab, fontsize=15)
+    for ax in axs.ravel():
+        ax.set_ylim((-axis_limit, axis_limit))
+        ax.set_xlim((-axis_limit, axis_limit))
 
-    axs[0, 0].set_title('diagnosed', fontsize=22).set_position([.5, 1.1])
-    axs[0, 1].set_title('healthy\nControls',
-                        fontsize=22).set_position([.5, 1.1])
-    axs[0, 0].set_ylabel('alpha asymmetry', fontsize=22, labelpad=20)
-    axs[1, 0].set_ylabel('alpha asymmetry', fontsize=22, labelpad=20)
-    axs[0, 2].set_ylabel('log(alpha power)', fontsize=22)
-    axs[1, 2].set_ylabel('alpha power', fontsize=22)
+    cbar_ax = [fig.add_axes([0.82, 0.43, 0.03, 0.3]),
+               fig.add_axes([0.82, 0.08, 0.03, 0.3])]
+    plt.colorbar(mappable=topos[0].img, cax=cbar_ax[0])
+    plt.colorbar(mappable=topos[-1].img, cax=cbar_ax[1])
 
+    axs[0, 0].set_title('diagnosed', fontsize=20).set_position([.5, 1.1])
+    axs[0, 1].set_title('healthy\ncontrols',
+                        fontsize=20).set_position([.5, 1.1])
+    axs[0, 0].set_ylabel('alpha\npower', fontsize=20, labelpad=18)
+    axs[1, 0].set_ylabel('alpha\nasymmetry', fontsize=20, labelpad=18)
+    cbar_ax[0].set_ylabel('log(alpha power)', fontsize=16)
+    cbar_ax[1].set_ylabel('alpha power', fontsize=16)
+
+    # correct cbar position with respect to the topo axes
     fig.canvas.draw()
-
     for row in range(2):
-        cbar_bounds = axs[row, 2].get_position().bounds
+        cbar_bounds = cbar_ax[row].get_position().bounds
         topo_bounds = axs[row, 0].get_position().bounds
-        tcklb = axs[row, 2].get_yticklabels()
-        axs[row, 2].set_yticklabels(tcklb, fontsize=15)
-        axs[row, 2].set_position([cbar_bounds[0], topo_bounds[1],
-                                  cbar_bounds[2], topo_bounds[3]])
+        cbar_ax[row].set_position([cbar_bounds[0], topo_bounds[1] + 0.05,
+                                   cbar_bounds[2], topo_bounds[3] - 0.07])
 
-    return fig
+    return fig, axs
 
 
 def plot_swarm(df, ax=None, ygrid=True):
@@ -304,8 +301,8 @@ def create_swarm_df(psd_high, psd_low):
 def plot_heatmap_add1(clst):
     '''Plot results of Standardized Analyses (ADD1) with heatmap and topo.'''
     fig = plt.figure(figsize=(7, 9))
-    gs = fig.add_gridspec(2, 2, hspace=0.55, top=0.95, bottom=0.05, left=0.08,
-                          height_ratios=[0.6, 0.4])
+    gs = fig.add_gridspec(2, 2, top=0.95, bottom=0.05, left=0.08, right=0.88,
+                          height_ratios=[0.6, 0.4], hspace=0.4, wspace=0.25)
     f_ax1 = fig.add_subplot(gs[0, :])
     f_ax2 = fig.add_subplot(gs[1, 0])
     f_ax3 = fig.add_subplot(gs[1, 1])
