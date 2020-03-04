@@ -222,15 +222,8 @@ def compute_all_rest(study='C', event_id=None, tmin=1., tmax=60., winlen=2.,
                                      step=step)
         all_psds.append(psd)
 
-        # additional safty checks
-        ch_names = np.array(raw.ch_names)
-        if idx > 0:
-            # all have same channel order and same frequency bins
-            assert (prev_ch_names == ch_names).all()
-            assert (freq == prev_freq).all()
-
-        prev_freq = freq
-        prev_ch_names = ch_names
+        if idx == 0:
+            ch_names = np.array(raw.ch_names)
         pbar.update(1)
 
     # group all psds in one array and save
