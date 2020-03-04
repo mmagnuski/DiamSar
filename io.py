@@ -150,6 +150,8 @@ def load_psd(path, study='C', eyes='closed', space='avg',
     elif fname.endswith('.hdf5') and space == 'src':
         from mne.externals import h5io
         temp = h5io.read_hdf5(op.join(psd_dir, fname))
+        if isinstance(temp['subject_id'], list):
+            temp['subject_id'] = np.array(temp['subject_id'])
         return temp['psd'], temp['freq'], None, temp['subject_id']
 
 
