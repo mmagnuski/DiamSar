@@ -385,9 +385,11 @@ def _apply_annot_to_tfr(annot, tfr, sfreq, freqs, n_cycles, orig_sample=0,
     n_times = tfr.shape[-1]
     n_times_rej = 0
 
+    bad_annot = [idx for idx, desc in enumerate(annot.description)
+                 if desc.startswith('BAD_')]
     tmin_sm, tmax_sm = orig_sample, orig_sample + n_times
-    annot_onset_sm = (annot.onset * sfreq).astype('int')
-    annot_duration_sm = (annot.duration * sfreq).astype('int')
+    annot_onset_sm = (annot.onset * sfreq).astype('int')[bad_annot]
+    annot_duration_sm = (annot.duration * sfreq).astype('int')[bad_annot]
     which_annot = (annot_onset_sm < tmax_sm) & (
         (annot_onset_sm + annot_duration_sm) > tmin_sm)
 
