@@ -76,13 +76,19 @@ def load_GH(paths, study=None, **kwargs):
     return data['G'], data['H']
 
 
-def load_forward(paths, **kwargs):
+def load_forward(paths, study=None, **kwargs):
     import mne
-    fwd_dir = paths.get_path('fwd')
-    return mne.read_forward_solution(
-        op.join(fwd_dir, 'DiamSar-eeg-oct-6-fwd.fif'), verbose=False)
+    if study == 'C':
+        fwd_dir = paths.get_path('fwd')
+        return mne.read_forward_solution(
+            op.join(fwd_dir, 'DiamSar-eeg-oct-6-fwd.fif'), verbose=False)
+    elif study == 'A':
+        fwd_dir = op.join(paths.get_path('eeg', study='A'), 'src')
+        return mne.read_forward_solution(
+            op.join(fwd_dir, 'DiamSar-fsaverage-oct-6-fwd.fif'), verbose=False)
 
 
+# - [ ] does not seem to be used anywhere in DiamSar, remove?
 def load_src_sym(paths, **kwargs):
     import mne
     src_dir = paths.get_path('fwd')
