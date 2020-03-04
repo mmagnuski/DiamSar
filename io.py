@@ -51,14 +51,9 @@ def load_chanord(paths, study=None, **kwargs):
 # FIXME - save proper info via borsar.write_info for all studies and simplify
 #         this function
 def load_info(paths, study=None, **kwargs):
-    if study == 'C':
-        ch_names = paths.get_data('chanord', study=study)
-        return mne.create_info(ch_names, sfreq=250., ch_types='eeg',
-                               montage='easycap-M1')
-    else:
-        chanpos_dir = paths.get_path('chanpos', study=study)
-        raw = mne.io.read_raw_fif(op.join(chanpos_dir, 'has_info_raw.fif'))
-        return raw.info
+    chanpos_dir = paths.get_path('chanpos', study=study)
+    raw = mne.io.read_raw_fif(op.join(chanpos_dir, 'has_info_raw.fif'))
+    return raw.info
 
 
 # FIXME - make a general purpose load_neighbours function in borsar
