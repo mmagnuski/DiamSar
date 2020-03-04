@@ -502,7 +502,7 @@ def plot_panel(bdi, bar_h=0.6, seed=22):
     return fig
 
 
-def src_plot(clst, cluster_idx=0, azimuth_pos = [35, 125]):
+def src_plot(clst, cluster_idx=0, azimuth_pos=[35, 125]):
     '''Plot source-level clusters as multi-axis images.
 
     Parameters
@@ -518,6 +518,8 @@ def src_plot(clst, cluster_idx=0, azimuth_pos = [35, 125]):
     -------
     fig : matplotlib figure
         Matplotlib figure with images.'''
+
+    from mayavi import mlab
     clst.plot(cluster_idx=cluster_idx)
 
     imgs = list()

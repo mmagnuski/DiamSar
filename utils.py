@@ -4,7 +4,7 @@ import numpy as np
 # define DiamSar colors
 # ---------------------
 colors = dict(diag=np.array([100, 149, 237]) / 255,
-             hc=np.array([255, 0 , 102]) / 255)
+              hc=np.array([255, 0 , 102]) / 255)
 col = np.stack([colors['hc'], colors['diag']], axis=0)
 colors['subdiag'] = np.mean(col, axis=0)
 

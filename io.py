@@ -109,7 +109,8 @@ def load_psd(path, study='C', eyes='closed', space='avg',
         prefix = prefix + '_winlen-{}_step-{}'.format(winlen, step)
     elif space == 'src':
         reg_pattern = '_reg-{:.2f}' if not isinstance(reg, str) else '_reg-{}'
-        prefix = prefix + (reg_pattern + 'weightnorm-{}').format(reg, weight_norm)
+        prefix = prefix + (reg_pattern + 'weightnorm-{}')
+        prefix = prefix.format(reg, weight_norm)
 
     # all psds are in C directory for convenience
     study_dir = path.get_path('main', study='C')

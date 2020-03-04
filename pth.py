@@ -22,6 +22,7 @@ paths = Paths()
 # - [x] set_paths(base_dir='C:\myproj\pac')
 # - [ ] should paths be also global in __init__.py?
 
+
 # study C
 # -------
 def set_paths(base_dir=None):
