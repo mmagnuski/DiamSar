@@ -243,10 +243,20 @@ def _load_stat(fname):
         from borsar.cluster import Clusters
 
         study = stat['description']['study']
-        info = pth.paths.get_data('info', study=study)
+        if 'src' in fname:
+            info = None
+            src = pth.paths.get_data('fwd', study=study)['src']
+            subject = src[0]['subject_his_id']
+            subjects_dir = pth.paths.get_path('subjects_dir')
+        else:
+            src = None
+            info = pth.paths.get_data('info', study=study)
+            subject, subjects_dir = None, None
+
         clst = Clusters(stat['clusters'], stat['pvals'], stat['stat'],
                         dimnames=stat['dimnames'], dimcoords=stat['dimcoords'],
-                        info=info, description=stat['description'])
+                        info=info, src=src, description=stat['description'],
+                        subject=subject, subjects_dir=subjects_dir)
         return clst
     else:
         return stat

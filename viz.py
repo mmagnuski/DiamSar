@@ -499,7 +499,8 @@ def plot_panel(bdi, bar_h=0.6, seed=22):
     return fig
 
 
-def src_plot(clst, cluster_idx=0, azimuth_pos=[35, 125]):
+def src_plot(clst, cluster_idx=0, azimuth_pos=[35, 125], colorbar=True,
+             cluster_p=True, vmin=-3, vmax=3):
     '''Plot source-level clusters as multi-axis images.
 
     Parameters
@@ -510,6 +511,14 @@ def src_plot(clst, cluster_idx=0, azimuth_pos=[35, 125]):
         Cluster to plot.
     azimuth_pos : list of int
         List of two azimuth position of the brain images.
+    colorbar : bool
+        Whether to show colorbar. True by default.
+    cluster_p : bool
+        Whether to show cluster p value text. True by default.
+    vmin : value
+        Minimum value of the colormap.
+    vmax : value
+        Maximum value of the colormap.
 
     Returns
     -------
@@ -517,7 +526,15 @@ def src_plot(clst, cluster_idx=0, azimuth_pos=[35, 125]):
         Matplotlib figure with images.'''
 
     from mayavi import mlab
-    clst.plot(cluster_idx=cluster_idx)
+    brain = clst.plot(cluster_idx=cluster_idx, vmin=vmin, vmax=vmax)
+
+    if not colorbar:
+        brain.hide_colorbar()
+
+    if not cluster_p:
+        # fing and hide cluster p text
+        clst_txt = brain.texts_dict['time_label']['text']
+        clst_txt.remove()
 
     imgs = list()
     for azi in azimuth_pos:
