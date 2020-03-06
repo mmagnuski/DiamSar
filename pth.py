@@ -16,10 +16,7 @@ files = dict()
 paths = Paths()
 
 # make paths work for non-dropbox installations:
-# - [x] make paths global
-# - [ ] create a diagram with study paths
-# - [x] change/create paths in a function set_paths()
-# - [x] set_paths(base_dir='C:\myproj\pac')
+# - [?] create a diagram with study paths
 # - [ ] should paths be also global in __init__.py?
 
 
