@@ -221,10 +221,7 @@ def plot_swarm(df, ax=None, ygrid=True):
 
     # t test value
     # ------------
-    # ...
-    # 1. t, p = ttest_ind(df.query(...), df.query(...))
-    # 2. format text: 't = {:.2f}, p = {:.2f}'.format(t, p)
-    # 3. plot text with matplotlib
+    # added to figures by hand in the end
     return ax
 
 
@@ -499,7 +496,7 @@ def plot_panel(bdi, bar_h=0.6, seed=22):
     return fig
 
 
-def src_plot(clst, cluster_idx=0, azimuth_pos=[35, 125], colorbar='mayavi',
+def src_plot(clst, cluster_idx=None, azimuth_pos=[35, 125], colorbar='mayavi',
              cluster_p=True, vmin=-3, vmax=3):
     '''Plot source-level clusters as two-axis image.
 
@@ -526,6 +523,16 @@ def src_plot(clst, cluster_idx=0, azimuth_pos=[35, 125], colorbar='mayavi',
         Matplotlib figure with images.'''
 
     from mayavi import mlab
+    if isinstance(cluster_idx, str) and cluster_idx == 'all':
+        n_clusters = len(clst)
+        if n_clusters == 0:
+            cluster_idx = None
+        elif n_clusters == 1:
+            cluster_idx = 0
+        else:
+            cluster_idx = np.arange(n_clusters).tolist()
+
+    # plot the 3d brain
     brain = clst.plot(cluster_idx=cluster_idx, vmin=vmin, vmax=vmax)
 
     if isinstance(colobar, bool):

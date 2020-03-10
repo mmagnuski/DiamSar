@@ -246,7 +246,8 @@ def _load_stat(fname):
         if 'src' in fname:
             info = None
             src = pth.paths.get_data('fwd', study=study)['src']
-            subject = src[0]['subject_his_id']
+            selection = stat['description']['selection']
+            subject = 'fsaverage_sym' if 'asy' in selection else 'fsaverage'
             subjects_dir = pth.paths.get_path('subjects_dir')
         else:
             src = None
