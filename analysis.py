@@ -204,7 +204,7 @@ def save_stat(stat, save_dir='stats'):
 def load_stat(fname=None, study='C', eyes='closed', space='avg',
               contrast='cvsd', selection='asy_frontal', freq_range=(8, 12),
               avg_freq=True, transform='log', div_by_sum=False,
-              stat_dir='stats'):
+              stat_dir=None):
     '''Read previously saved analysis result.
 
     Parameters
@@ -223,6 +223,7 @@ def load_stat(fname=None, study='C', eyes='closed', space='avg',
 
     # if fname is not specified, construct
     if fname is None:
+        stat_dir = 'stats' if stat_dir is None else stat_dir
         fname = ('stat_study-{}_eyes-{}_space-{}_contrast-{}_selection-{}'
                  '_freqrange-{}_avgfreq-{}_transform-{}_divbysum-{}.hdf5')
         vars = [study, eyes, space, contrast, selection, freq_range,
@@ -246,7 +247,8 @@ def _load_stat(fname):
         if 'src' in fname:
             info = None
             src = pth.paths.get_data('fwd', study=study)['src']
-            subject = src[0]['subject_his_id']
+            is_asy = 'asy' in stat['description']['selection']
+            subject = 'fsaverage_sym' if is_asy else 'fsaverage'
             subjects_dir = pth.paths.get_path('subjects_dir')
         else:
             src = None
