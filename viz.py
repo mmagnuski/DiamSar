@@ -496,8 +496,9 @@ def plot_panel(bdi, bar_h=0.6, seed=22):
     return fig
 
 
-def src_plot(clst, cluster_idx=None, azimuth_pos=[35, 125], colorbar='mayavi',
-             cluster_p=True, vmin=-3, vmax=3):
+def src_plot(clst, cluster_idx=None, colorbar='mayavi', azimuth=[35, 125],
+             elevation=[None, None], cluster_p=True, vmin=-3, vmax=3,
+             figure_size=None):
     '''Plot source-level clusters as two-axis image.
 
     Parameters
@@ -510,7 +511,7 @@ def src_plot(clst, cluster_idx=None, azimuth_pos=[35, 125], colorbar='mayavi',
         List of two azimuth position of the brain images.
     colorbar : bool | 'mayavi' | 'matplotlib'
         Whether to show colorbar. True by default.
-    cluster_p : bool
+    cluster_p : bool | 'mayavi' | 'matplotlib'
         Whether to show cluster p value text. True by default.
     vmin : value
         Minimum value of the colormap.
@@ -533,32 +534,44 @@ def src_plot(clst, cluster_idx=None, azimuth_pos=[35, 125], colorbar='mayavi',
             cluster_idx = np.arange(n_clusters).tolist()
 
     # plot the 3d brain
-    brain = clst.plot(cluster_idx=cluster_idx, vmin=vmin, vmax=vmax)
+    brain = clst.plot(cluster_idx=cluster_idx, vmin=vmin, vmax=vmax,
+                      figure_size=figure_size)
 
-    if isinstance(colobar, bool):
+    if isinstance(colorbar, bool):
         colorbar = 'matplotlib' if colorbar else ''
+
+    if isinstance(cluster_p, bool):
+        cluster_p = 'matplotlib' if cluster_p else ''
 
     if not colorbar == 'mayavi':
         brain.hide_colorbar()
 
-    if not cluster_p:
+    if not cluster_p == 'mayavi':
         # fing and hide cluster p text
         clst_txt = brain.texts_dict['time_label']['text']
         clst_txt.remove()
 
     imgs = list()
-    for azi in azimuth_pos:
-        mlab.view(azimuth=azi)
+    for azi, ele in zip(azimuth, elevation):
+        mlab.view(azimuth=azi, elevation=ele)
         img = mlab.screenshot(antialiased=True)
         imgs.append(img)
     mlab.close()
 
-    bottom = 0.12 if colorbar == 'matplotlib' else 0.05
+    bottom = (0.05 + 0.17 * (colorbar == 'matplotlib')
+              + 0.1 * (cluster_p == 'matplotlib'))
     gridspec = {'hspace': 0.1, 'wspace': 0.1, 'left': 0.025, 'right': 0.975,
                 'top': 0.95, 'bottom': bottom}
     fig, ax = plt.subplots(ncols=2, figsize=(12, 6), gridspec_kw=gridspec)
 
     for this_ax, this_img in zip(ax, imgs):
+        # trim image
+        iswhite = this_img.mean(axis=-1) == 255
+        cols = np.where(~iswhite.all(axis=0))[0][[0, -1]]
+        rows = np.where(~iswhite.all(axis=1))[0][[0, -1]]
+        this_img = this_img[rows[0]:rows[1] + 1, cols[0]:cols[1] + 1]
+
+        # show image
         this_ax.imshow(this_img)
         this_ax.set_axis_off()
 
@@ -578,6 +591,16 @@ def src_plot(clst, cluster_idx=None, azimuth_pos=[35, 125], colorbar='mayavi',
         # increse cbar x tick labels fontsize
         for tck in cbar.ax.xaxis.get_ticklabels():
             tck.set_fontsize(14)
+
+    if cluster_p == 'matplotlib':
+        bottom = 0.06 + 0.18 * (colorbar == 'matplotlib')
+        # text_ax = fig.add_axes([0.2, 0.01, 0.6, 0.05])
+        if len(clst) == 0:
+            pval_txt = 'NA'
+        else:
+            pval_txt = ', '.join(['{:.2f}'.format(val) for val in clst.pvals])
+        fig.text(0.5, bottom, 'cluster p values: {}'.format(pval_txt),
+                 horizontalalignment='center', fontsize=15)
 
     return fig
 
