@@ -202,7 +202,7 @@ def save_stat(stat, save_dir='stats'):
 
 # TODO: add option to read source space Clusters
 def load_stat(fname=None, study='C', eyes='closed', space='avg',
-              contrast='cvsd', selection='asy_frontal', freq_range=(8, 12),
+              contrast='cvsd', selection='asy_frontal', freq_range=(8, 13),
               avg_freq=True, transform='log', div_by_sum=False,
               stat_dir=None):
     '''Read previously saved analysis result.
@@ -247,8 +247,8 @@ def _load_stat(fname):
         if 'src' in fname:
             info = None
             src = pth.paths.get_data('fwd', study=study)['src']
-            is_asy = 'asy' in stat['description']['selection']
-            subject = 'fsaverage_sym' if is_asy else 'fsaverage'
+            selection = stat['description']['selection']
+            subject = 'fsaverage_sym' if 'asy' in selection else 'fsaverage'
             subjects_dir = pth.paths.get_path('subjects_dir')
         else:
             src = None

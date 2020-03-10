@@ -96,7 +96,7 @@ def plot_grid_cluster(stats_clst, contrast, vlim=3):
 
     # add study labels
     # ----------------
-    for idx, letter in enumerate(list('ABC')):
+    for idx, letter in enumerate(['I', 'II', 'III']):
         this_ax = ax[0, idx]
         box = this_ax.get_position()
         mid_x = box.corners()[:, 0].mean()
@@ -158,13 +158,13 @@ def plot_multi_topo(psds_avg, info_frontal, info_asy):
     plt.colorbar(mappable=topos[0].img, cax=cbar_ax[0])
     plt.colorbar(mappable=topos[-1].img, cax=cbar_ax[1])
 
-    axs[0, 0].set_title('diagnosed', fontsize=20).set_position([.5, 1.1])
+    axs[0, 0].set_title('diagnosed', fontsize=17).set_position([.5, 1.0])
     axs[0, 1].set_title('healthy\ncontrols',
-                        fontsize=20).set_position([.5, 1.1])
-    axs[0, 0].set_ylabel('alpha\npower', fontsize=20, labelpad=18)
-    axs[1, 0].set_ylabel('alpha\nasymmetry', fontsize=20, labelpad=18)
-    cbar_ax[0].set_ylabel('log(alpha power)', fontsize=16)
-    cbar_ax[1].set_ylabel('alpha power', fontsize=16)
+                        fontsize=17).set_position([.5, 1.0])
+    axs[0, 0].set_ylabel('alpha\npower', fontsize=20, labelpad=7)
+    axs[1, 0].set_ylabel('alpha\nasymmetry', fontsize=20, labelpad=7)
+    cbar_ax[0].set_ylabel('log(alpha power)', fontsize=16, labelpad=10)
+    cbar_ax[1].set_ylabel('alpha power', fontsize=16, labelpad=10)
 
     # correct cbar position with respect to the topo axes
     fig.canvas.draw()
@@ -221,10 +221,7 @@ def plot_swarm(df, ax=None, ygrid=True):
 
     # t test value
     # ------------
-    # ...
-    # 1. t, p = ttest_ind(df.query(...), df.query(...))
-    # 2. format text: 't = {:.2f}, p = {:.2f}'.format(t, p)
-    # 3. plot text with matplotlib
+    # added to figures by hand in the end
     return ax
 
 
@@ -499,9 +496,10 @@ def plot_panel(bdi, bar_h=0.6, seed=22):
     return fig
 
 
-def src_plot(clst, cluster_idx=0, azimuth_pos=[35, 125], colorbar=True,
-             cluster_p=True, vmin=-3, vmax=3):
-    '''Plot source-level clusters as multi-axis images.
+def src_plot(clst, cluster_idx=None, colorbar='mayavi', azimuth=[35, 125],
+             elevation=[None, None], cluster_p=True, vmin=-3, vmax=3,
+             figure_size=None):
+    '''Plot source-level clusters as two-axis image.
 
     Parameters
     ----------
@@ -511,9 +509,9 @@ def src_plot(clst, cluster_idx=0, azimuth_pos=[35, 125], colorbar=True,
         Cluster to plot.
     azimuth_pos : list of int
         List of two azimuth position of the brain images.
-    colorbar : bool
+    colorbar : bool | 'mayavi' | 'matplotlib'
         Whether to show colorbar. True by default.
-    cluster_p : bool
+    cluster_p : bool | 'mayavi' | 'matplotlib'
         Whether to show cluster p value text. True by default.
     vmin : value
         Minimum value of the colormap.
@@ -526,30 +524,83 @@ def src_plot(clst, cluster_idx=0, azimuth_pos=[35, 125], colorbar=True,
         Matplotlib figure with images.'''
 
     from mayavi import mlab
-    brain = clst.plot(cluster_idx=cluster_idx, vmin=vmin, vmax=vmax)
+    if isinstance(cluster_idx, str) and cluster_idx == 'all':
+        n_clusters = len(clst)
+        if n_clusters == 0:
+            cluster_idx = None
+        elif n_clusters == 1:
+            cluster_idx = 0
+        else:
+            cluster_idx = np.arange(n_clusters).tolist()
 
-    if not colorbar:
+    # plot the 3d brain
+    brain = clst.plot(cluster_idx=cluster_idx, vmin=vmin, vmax=vmax,
+                      figure_size=figure_size)
+
+    if isinstance(colorbar, bool):
+        colorbar = 'matplotlib' if colorbar else ''
+
+    if isinstance(cluster_p, bool):
+        cluster_p = 'matplotlib' if cluster_p else ''
+
+    if not colorbar == 'mayavi':
         brain.hide_colorbar()
 
-    if not cluster_p:
+    if not cluster_p == 'mayavi':
         # fing and hide cluster p text
         clst_txt = brain.texts_dict['time_label']['text']
         clst_txt.remove()
 
     imgs = list()
-    for azi in azimuth_pos:
-        mlab.view(azimuth=azi)
+    for azi, ele in zip(azimuth, elevation):
+        mlab.view(azimuth=azi, elevation=ele)
         img = mlab.screenshot(antialiased=True)
         imgs.append(img)
     mlab.close()
 
+    bottom = (0.05 + 0.17 * (colorbar == 'matplotlib')
+              + 0.1 * (cluster_p == 'matplotlib'))
     gridspec = {'hspace': 0.1, 'wspace': 0.1, 'left': 0.025, 'right': 0.975,
-                'top': 0.95, 'bottom': 0.05}
+                'top': 0.95, 'bottom': bottom}
     fig, ax = plt.subplots(ncols=2, figsize=(12, 6), gridspec_kw=gridspec)
 
     for this_ax, this_img in zip(ax, imgs):
+        # trim image
+        iswhite = this_img.mean(axis=-1) == 255
+        cols = np.where(~iswhite.all(axis=0))[0][[0, -1]]
+        rows = np.where(~iswhite.all(axis=1))[0][[0, -1]]
+        this_img = this_img[rows[0]:rows[1] + 1, cols[0]:cols[1] + 1]
+
+        # show image
         this_ax.imshow(this_img)
         this_ax.set_axis_off()
+
+    if colorbar == 'matplotlib':
+        import matplotlib as mpl
+
+        c_map_ax = fig.add_axes([0.2, 0.01, 0.6, 0.05])
+
+        cmap = plt.get_cmap('RdBu_r')
+        norm = mpl.colors.Normalize(vmin, vmax)
+        cbar = mpl.colorbar.ColorbarBase(c_map_ax, cmap=cmap, norm=norm,
+                                         orientation='horizontal')
+
+        cbar.ax.xaxis.set_ticks_position('top')
+        cbar.set_label('t value', labelpad=-70, fontsize=18)
+
+        # increse cbar x tick labels fontsize
+        for tck in cbar.ax.xaxis.get_ticklabels():
+            tck.set_fontsize(14)
+
+    if cluster_p == 'matplotlib':
+        bottom = 0.06 + 0.18 * (colorbar == 'matplotlib')
+        # text_ax = fig.add_axes([0.2, 0.01, 0.6, 0.05])
+        if len(clst) == 0:
+            pval_txt = 'NA'
+        else:
+            pval_txt = ', '.join(['{:.2f}'.format(val) for val in clst.pvals])
+        fig.text(0.5, bottom, 'cluster p values: {}'.format(pval_txt),
+                 horizontalalignment='center', fontsize=15)
 
     return fig
 
