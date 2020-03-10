@@ -96,7 +96,7 @@ def plot_grid_cluster(stats_clst, contrast, vlim=3):
 
     # add study labels
     # ----------------
-    for idx, letter in enumerate(list('ABC')):
+    for idx, letter in enumerate(['I', 'II', 'III']):
         this_ax = ax[0, idx]
         box = this_ax.get_position()
         mid_x = box.corners()[:, 0].mean()
@@ -158,13 +158,13 @@ def plot_multi_topo(psds_avg, info_frontal, info_asy):
     plt.colorbar(mappable=topos[0].img, cax=cbar_ax[0])
     plt.colorbar(mappable=topos[-1].img, cax=cbar_ax[1])
 
-    axs[0, 0].set_title('diagnosed', fontsize=20).set_position([.5, 1.1])
+    axs[0, 0].set_title('diagnosed', fontsize=17).set_position([.5, 1.0])
     axs[0, 1].set_title('healthy\ncontrols',
-                        fontsize=20).set_position([.5, 1.1])
-    axs[0, 0].set_ylabel('alpha\npower', fontsize=20, labelpad=18)
-    axs[1, 0].set_ylabel('alpha\nasymmetry', fontsize=20, labelpad=18)
-    cbar_ax[0].set_ylabel('log(alpha power)', fontsize=16)
-    cbar_ax[1].set_ylabel('alpha power', fontsize=16)
+                        fontsize=17).set_position([.5, 1.0])
+    axs[0, 0].set_ylabel('alpha\npower', fontsize=20, labelpad=7)
+    axs[1, 0].set_ylabel('alpha\nasymmetry', fontsize=20, labelpad=7)
+    cbar_ax[0].set_ylabel('log(alpha power)', fontsize=16, labelpad=10)
+    cbar_ax[1].set_ylabel('alpha power', fontsize=16, labelpad=10)
 
     # correct cbar position with respect to the topo axes
     fig.canvas.draw()
@@ -499,9 +499,9 @@ def plot_panel(bdi, bar_h=0.6, seed=22):
     return fig
 
 
-def src_plot(clst, cluster_idx=0, azimuth_pos=[35, 125], colorbar=True,
+def src_plot(clst, cluster_idx=0, azimuth_pos=[35, 125], colorbar='mayavi',
              cluster_p=True, vmin=-3, vmax=3):
-    '''Plot source-level clusters as multi-axis images.
+    '''Plot source-level clusters as two-axis image.
 
     Parameters
     ----------
@@ -511,7 +511,7 @@ def src_plot(clst, cluster_idx=0, azimuth_pos=[35, 125], colorbar=True,
         Cluster to plot.
     azimuth_pos : list of int
         List of two azimuth position of the brain images.
-    colorbar : bool
+    colorbar : bool | 'mayavi' | 'matplotlib'
         Whether to show colorbar. True by default.
     cluster_p : bool
         Whether to show cluster p value text. True by default.
@@ -528,7 +528,10 @@ def src_plot(clst, cluster_idx=0, azimuth_pos=[35, 125], colorbar=True,
     from mayavi import mlab
     brain = clst.plot(cluster_idx=cluster_idx, vmin=vmin, vmax=vmax)
 
-    if not colorbar:
+    if isinstance(colobar, bool):
+        colorbar = 'matplotlib' if colorbar else ''
+
+    if not colorbar == 'mayavi':
         brain.hide_colorbar()
 
     if not cluster_p:
@@ -543,13 +546,31 @@ def src_plot(clst, cluster_idx=0, azimuth_pos=[35, 125], colorbar=True,
         imgs.append(img)
     mlab.close()
 
+    bottom = 0.12 if colorbar == 'matplotlib' else 0.05
     gridspec = {'hspace': 0.1, 'wspace': 0.1, 'left': 0.025, 'right': 0.975,
-                'top': 0.95, 'bottom': 0.05}
+                'top': 0.95, 'bottom': bottom}
     fig, ax = plt.subplots(ncols=2, figsize=(12, 6), gridspec_kw=gridspec)
 
     for this_ax, this_img in zip(ax, imgs):
         this_ax.imshow(this_img)
         this_ax.set_axis_off()
+
+    if colorbar == 'matplotlib':
+        import matplotlib as mpl
+
+        c_map_ax = fig.add_axes([0.2, 0.01, 0.6, 0.05])
+
+        cmap = plt.get_cmap('RdBu_r')
+        norm = mpl.colors.Normalize(vmin, vmax)
+        cbar = mpl.colorbar.ColorbarBase(c_map_ax, cmap=cmap, norm=norm,
+                                         orientation='horizontal')
+
+        cbar.ax.xaxis.set_ticks_position('top')
+        cbar.set_label('t value', labelpad=-70, fontsize=18)
+
+        # increse cbar x tick labels fontsize
+        for tck in cbar.ax.xaxis.get_ticklabels():
+            tck.set_fontsize(14)
 
     return fig
 

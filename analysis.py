@@ -202,7 +202,7 @@ def save_stat(stat, save_dir='stats'):
 
 # TODO: add option to read source space Clusters
 def load_stat(fname=None, study='C', eyes='closed', space='avg',
-              contrast='cvsd', selection='asy_frontal', freq_range=(8, 12),
+              contrast='cvsd', selection='asy_frontal', freq_range=(8, 13),
               avg_freq=True, transform='log', div_by_sum=False,
               stat_dir='stats'):
     '''Read previously saved analysis result.
