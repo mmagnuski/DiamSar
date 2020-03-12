@@ -51,14 +51,9 @@ def load_chanord(paths, study=None, **kwargs):
 # FIXME - save proper info via borsar.write_info for all studies and simplify
 #         this function
 def load_info(paths, study=None, **kwargs):
-    if study == 'C':
-        ch_names = paths.get_data('chanord', study=study)
-        return mne.create_info(ch_names, sfreq=250., ch_types='eeg',
-                               montage='easycap-M1')
-    else:
-        chanpos_dir = paths.get_path('chanpos', study=study)
-        raw = mne.io.read_raw_fif(op.join(chanpos_dir, 'has_info_raw.fif'))
-        return raw.info
+    chanpos_dir = paths.get_path('chanpos', study=study)
+    raw = mne.io.read_raw_fif(op.join(chanpos_dir, 'has_info_raw.fif'))
+    return raw.info
 
 
 # FIXME - make a general purpose load_neighbours function in borsar
@@ -81,13 +76,19 @@ def load_GH(paths, study=None, **kwargs):
     return data['G'], data['H']
 
 
-def load_forward(paths, **kwargs):
+def load_forward(paths, study=None, **kwargs):
     import mne
-    fwd_dir = paths.get_path('fwd')
-    return mne.read_forward_solution(
-        op.join(fwd_dir, 'DiamSar-eeg-oct-6-fwd.fif'), verbose=False)
+    if study == 'C':
+        fwd_dir = paths.get_path('fwd')
+        return mne.read_forward_solution(
+            op.join(fwd_dir, 'DiamSar-eeg-oct-6-fwd.fif'), verbose=False)
+    elif study == 'A':
+        fwd_dir = op.join(paths.get_path('eeg', study='A'), 'src')
+        return mne.read_forward_solution(
+            op.join(fwd_dir, 'DiamSar-fsaverage-oct-6-fwd.fif'), verbose=False)
 
 
+# - [ ] does not seem to be used anywhere in DiamSar, remove?
 def load_src_sym(paths, **kwargs):
     import mne
     src_dir = paths.get_path('fwd')
@@ -109,7 +110,8 @@ def load_psd(path, study='C', eyes='closed', space='avg',
         prefix = prefix + '_winlen-{}_step-{}'.format(winlen, step)
     elif space == 'src':
         reg_pattern = '_reg-{:.2f}' if not isinstance(reg, str) else '_reg-{}'
-        prefix = prefix + (reg_pattern + 'weightnorm-{}').format(reg, weight_norm)
+        prefix = prefix + (reg_pattern + 'weightnorm-{}')
+        prefix = prefix.format(reg, weight_norm)
 
     # all psds are in C directory for convenience
     study_dir = path.get_path('main', study='C')
@@ -148,6 +150,8 @@ def load_psd(path, study='C', eyes='closed', space='avg',
     elif fname.endswith('.hdf5') and space == 'src':
         from mne.externals import h5io
         temp = h5io.read_hdf5(op.join(psd_dir, fname))
+        if isinstance(temp['subject_id'], list):
+            temp['subject_id'] = np.array(temp['subject_id'])
         return temp['psd'], temp['freq'], None, temp['subject_id']
 
 

@@ -202,9 +202,9 @@ def save_stat(stat, save_dir='stats'):
 
 # TODO: add option to read source space Clusters
 def load_stat(fname=None, study='C', eyes='closed', space='avg',
-              contrast='cvsd', selection='asy_frontal', freq_range=(8, 12),
+              contrast='cvsd', selection='asy_frontal', freq_range=(8, 13),
               avg_freq=True, transform='log', div_by_sum=False,
-              stat_dir='stats'):
+              stat_dir=None):
     '''Read previously saved analysis result.
 
     Parameters
@@ -223,6 +223,7 @@ def load_stat(fname=None, study='C', eyes='closed', space='avg',
 
     # if fname is not specified, construct
     if fname is None:
+        stat_dir = 'stats' if stat_dir is None else stat_dir
         fname = ('stat_study-{}_eyes-{}_space-{}_contrast-{}_selection-{}'
                  '_freqrange-{}_avgfreq-{}_transform-{}_divbysum-{}.hdf5')
         vars = [study, eyes, space, contrast, selection, freq_range,
@@ -243,10 +244,21 @@ def _load_stat(fname):
         from borsar.cluster import Clusters
 
         study = stat['description']['study']
-        info = pth.paths.get_data('info', study=study)
+        if 'src' in fname:
+            info = None
+            src = pth.paths.get_data('fwd', study=study)['src']
+            selection = stat['description']['selection']
+            subject = 'fsaverage_sym' if 'asy' in selection else 'fsaverage'
+            subjects_dir = pth.paths.get_path('subjects_dir')
+        else:
+            src = None
+            info = pth.paths.get_data('info', study=study)
+            subject, subjects_dir = None, None
+
         clst = Clusters(stat['clusters'], stat['pvals'], stat['stat'],
                         dimnames=stat['dimnames'], dimcoords=stat['dimcoords'],
-                        info=info, description=stat['description'])
+                        info=info, src=src, description=stat['description'],
+                        subject=subject, subjects_dir=subjects_dir)
         return clst
     else:
         return stat

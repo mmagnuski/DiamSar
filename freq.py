@@ -222,15 +222,8 @@ def compute_all_rest(study='C', event_id=None, tmin=1., tmax=60., winlen=2.,
                                      step=step)
         all_psds.append(psd)
 
-        # additional safty checks
-        ch_names = np.array(raw.ch_names)
-        if idx > 0:
-            # all have same channel order and same frequency bins
-            assert (prev_ch_names == ch_names).all()
-            assert (freq == prev_freq).all()
-
-        prev_freq = freq
-        prev_ch_names = ch_names
+        if idx == 0:
+            ch_names = np.array(raw.ch_names)
         pbar.update(1)
 
     # group all psds in one array and save
@@ -343,7 +336,7 @@ def make_csd_morlet_raw(raw, freqs, events=None, event_id=None, tmin=0.,
 
     for event_idx in range(events.shape[0]):
         tmin_ts = events[event_idx, 0] + int(round(tmin * sfreq))
-        tmax_ts = tmin_ts + int(round(tmax * sfreq))
+        tmax_ts = events[event_idx, 0] + int(round(tmax * sfreq))
 
         # FIXME - make sure tfr here is complex
         start, end = tmin_ts - add_rim, tmax_ts + add_rim
@@ -370,8 +363,12 @@ def make_csd_morlet_raw(raw, freqs, events=None, event_id=None, tmin=0.,
         csds.append(csd)
 
     # weighted average
-    perc_correct = 1 - np.array(all_weights)
-    csds = np.average(np.stack(csds, axis=0), weights=perc_correct, axis=0)
+    if len(csds) > 1:
+        perc_correct = 1 - np.array(all_weights)
+        csds = np.average(np.stack(csds, axis=0), weights=perc_correct,
+                          axis=0)
+    else:
+        csds = csds[0]
 
     max_wlen = int(round(max(freqs / n_cycles) * sfreq))
     return CrossSpectralDensity(csds, raw.ch_names, freqs, max_wlen)
@@ -388,9 +385,11 @@ def _apply_annot_to_tfr(annot, tfr, sfreq, freqs, n_cycles, orig_sample=0,
     n_times = tfr.shape[-1]
     n_times_rej = 0
 
+    bad_annot = [idx for idx, desc in enumerate(annot.description)
+                 if desc.startswith('BAD_')]
     tmin_sm, tmax_sm = orig_sample, orig_sample + n_times
-    annot_onset_sm = (annot.onset * sfreq).astype('int')
-    annot_duration_sm = (annot.duration * sfreq).astype('int')
+    annot_onset_sm = (annot.onset * sfreq).astype('int')[bad_annot]
+    annot_duration_sm = (annot.duration * sfreq).astype('int')[bad_annot]
     which_annot = (annot_onset_sm < tmax_sm) & (
         (annot_onset_sm + annot_duration_sm) > tmin_sm)
 
@@ -417,19 +416,23 @@ def _deal_with_csd_inputs(tmin, tmax, events, event_id):
     if tmin is None or tmax is None:
         raise ValueError('Both tmin and tmax have to be specified')
 
+    # there should be tmin and tmax checks
+
     if events is None:
-        raise NotImplementedError
-
-    got_event_id = event_id is not None
-    if got_event_id:
-        if isinstance(event_id, int):
-            event_id = [event_id]
+        event_id = [123]
+        events = np.array([[0, 0, 123]])
+        return events, tmin, tmax
     else:
-        event_id = np.unique(events[:, -1])
-    events_of_interest = np.in1d(events[:, -1], event_id)
-    events = events[events_of_interest]
+        got_event_id = event_id is not None
+        if got_event_id:
+            if isinstance(event_id, int):
+                event_id = [event_id]
+        else:
+            event_id = np.unique(events[:, -1])
+        events_of_interest = np.in1d(events[:, -1], event_id)
+        events = events[events_of_interest]
 
-    return events, tmin, tmax
+        return events, tmin, tmax
 
 
 def get_psds(study='C', space='avg', contrast='cvsd', selection='frontal'):
