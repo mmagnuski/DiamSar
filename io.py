@@ -88,7 +88,6 @@ def load_forward(paths, study=None, **kwargs):
             op.join(fwd_dir, 'DiamSar-fsaverage-oct-6-fwd.fif'), verbose=False)
 
 
-# - [ ] does not seem to be used anywhere in DiamSar, remove?
 def load_src_sym(paths, **kwargs):
     import mne
     src_dir = paths.get_path('fwd')

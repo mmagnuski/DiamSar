@@ -255,7 +255,7 @@ def _load_stat(fname):
             info = pth.paths.get_data('info', study=study)
             subject, subjects_dir = None, None
 
-        clst = Clusters(stat['clusters'], stat['pvals'], stat['stat'],
+        clst = Clusters(stat['stat'], stat['clusters'], stat['pvals'],
                         dimnames=stat['dimnames'], dimcoords=stat['dimcoords'],
                         info=info, src=src, description=stat['description'],
                         subject=subject, subjects_dir=subjects_dir)
@@ -541,7 +541,7 @@ def construct_clusters(clusters, pval, stat, space, stat_info, info,
     else:
         stat_info['freq'] = freq
 
-    clst = Clusters(clusters, pval, stat, dimnames, dimcoords,
+    clst = Clusters(stat, clusters, pval, dimnames, dimcoords,
                     description=stat_info, info=info, src=src,
                     subjects_dir=subjects_dir, subject=subject)
     return clst
