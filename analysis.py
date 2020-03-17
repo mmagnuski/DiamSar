@@ -61,7 +61,7 @@ def run_analysis(study='C', contrast='cvsc', eyes='closed', space='avg',
 
     Returns
     -------
-    clst : borsar.cluster.Clusters |
+    clst : borsar.cluster.Clusters | dict
         Result of the cluster-based permutation test
     '''
     # get base study name and setup stat_info dict
@@ -75,26 +75,15 @@ def run_analysis(study='C', contrast='cvsc', eyes='closed', space='avg',
     psds, freq, ch_names, subj_id = pth.paths.get_data(
         'psd', study=study, eyes=eyes, space=space)
 
+    # TODO - re-save psds without nan-subjects?
     # select only subjects without NaNs
     no_nans = ~np.any(np.isnan(psds), axis=(1, 2))
     if not np.all(no_nans):
         psds = psds[no_nans]
         subj_id = subj_id[no_nans]
 
-    if not space == 'src':
-        info = pth.paths.get_data('info', study=study)
-        src, subjects_dir, subject = None, None, None
-
-        # check that channel order agrees between psds and info
-        msg = 'Channel order does not agree between psds and info object.'
-        assert (np.array(ch_names) == np.array(info['ch_names'])).all(), msg
-    else:
-        # read fwd, get subjects_dir and subject
-        fwd = pth.paths.get_data('fwd', study=study)
-        subjects_dir = pth.paths.get_path('subjects_dir')
-        subject = 'fsaverage'
-        src = fwd['src']
-        info = None
+    info, src, subject, subjects_dir = get_space_info(study, space, ch_names,
+                                                      selection)
 
     # prepare data
     # ------------
@@ -105,14 +94,13 @@ def run_analysis(study='C', contrast='cvsc', eyes='closed', space='avg',
         selection=selection, transform=transform, div_by_sum=div_by_sum,
         src=src, subjects_dir=subjects_dir, subject=subject)
 
-    if space == 'src' and 'asy' in selection:
-        src = pth.paths.get_data('src_sym')
-        subject = 'fsaverage_sym'
-
     # construct adjacency matrix for clustering
     if 'pairs' not in selection:
         adjacency = get_adjacency(study, space, ch_names, selection, src)
 
+    # TODO: this is actually not required?
+    #       transposing psds, saving the transpose
+    #       and then transposing back here does not make much sense
     # put spatial dimension last for cluster-based test
     if not avg_freq or psd.ndim == 3:
         psd = psd.transpose((0, 2, 1))
@@ -246,6 +234,7 @@ def _load_stat(fname):
         study = stat['description']['study']
         if 'src' in fname:
             info = None
+            # FIXME: src should be different when 'asy'
             src = pth.paths.get_data('fwd', study=study)['src']
             selection = stat['description']['selection']
             subject = 'fsaverage_sym' if 'asy' in selection else 'fsaverage'
@@ -515,16 +504,10 @@ def construct_clusters(clusters, pval, stat, space, stat_info, info,
 
     if space == 'src':
         dimnames, dimcoords = ['vert'], [ch_names]
-
-        # test here!
-        # import pdb; pdb.set_trace()
-
-        if isinstance(ch_names, dict):
-            from .src import _to_data_vert
-            dimcoords = _to_data_vert(src, ch_names)
     else:
-        # if ch_names contain dash then asymmetry measures were used, we want
-        # to only retain the name of the right channel (because asym = R - L)
+        # if ch_names contain dash then asymmetry measures were used (R - L),
+        # we only retain the name of the right channel (otherwise there would
+        # be an error about mismatch between Info and cluster.dimcoords)
         ch_names = [ch.split('-')[-1] if '-' in ch else ch
                     for ch in ch_names]
         dimnames, dimcoords = ['chan'], [ch_names]
@@ -545,3 +528,26 @@ def construct_clusters(clusters, pval, stat, space, stat_info, info,
                     description=stat_info, info=info, src=src,
                     subjects_dir=subjects_dir, subject=subject)
     return clst
+
+
+def get_space_info(study, space, ch_names, selection):
+    '''Return relevant source/channel space along with additional variables.'''
+    if not space == 'src':
+        info = pth.paths.get_data('info', study=study)
+        src, subjects_dir, subject = None, None, None
+
+        # check that channel order agrees between psds and info
+        msg = 'Channel order does not agree between psds and info object.'
+        assert (np.array(ch_names) == np.array(info['ch_names'])).all(), msg
+    else:
+        # read fwd, get subjects_dir and subject
+        subjects_dir = pth.paths.get_path('subjects_dir')
+        info = None
+        if 'asy' in selection:
+            src = pth.paths.get_data('src_sym')
+            subject = 'fsaverage_sym'
+        else:
+            subject = 'fsaverage'
+            src = pth.paths.get_data('fwd', study=study)['src']
+
+    return info, src, subject, subjects_dir
