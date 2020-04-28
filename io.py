@@ -2,6 +2,8 @@ import re
 import os
 import os.path as op
 import warnings
+import datetime
+from dateutil.relativedelta import relativedelta
 
 import numpy as np
 import pandas as pd
@@ -15,29 +17,89 @@ import mne
 # FIXME - use in register mode
 def read_bdi(paths, study='C', **kwargs):
     '''Read BDI scores.'''
+    full_table = kwargs.get('full_table', False)
     base_dir = paths.get_path('main', study=study)
     beh_dir = op.join(base_dir, 'beh')
     if study == 'A':
         df = pd.read_excel(op.join(beh_dir, 'baza minimal.xlsx'))
-        bdi = df[['ID', 'BDI_k', 'DIAGNOZA']]
-        bdi.loc[:, 'DIAGNOZA'] = bdi['DIAGNOZA'].astype('bool')
-        bdi = bdi.rename(columns={'BDI_k': 'BDI-I'})
+        select_col = ['ID', 'BDI_k', 'DIAGNOZA']
+        rename_col = {'BDI_k': 'BDI-I'}
+
+        if full_table:
+            select_col += ['plec_k', 'wiek']
+            rename_col['plec_k'] = 'PŁEĆ'
+
+        bdi = df[select_col]
+        bdi = make_sure_diagnosis_is_boolean(bdi)
+        bdi = bdi.rename(columns=rename_col)
+
+        if full_table:
+            relabel = {1: 'KOBIETA', 2: 'MĘŻCZYZNA'}
+            bdi.loc[:, 'PŁEĆ'] = df.PŁEĆ.replace(relabel)
+
     if study == 'B':
         # FIXME: B has weird folder structure
         beh_dir = op.join(base_dir, 'porządki liniowe dźwiekowe + rest', 'beh')
-        bdi = pd.read_excel(op.join(beh_dir, 'BDI.xlsx'), header=None,
-                            names=['ID', 'BDI-I'])
+        if full_table:
+            bdi = pd.read_excel(op.join(beh_dir, 'BAZA DANYCH.xlsx'))
+            sel_col = ['BDI 2-pomiar wynik', 'wykształcenie', 'wiek', 'płeć']
+            # has also 'problemy ze snem', 'miasto'
+            bdi = bdi[sel_col]
+            # ! check ID with 'BDI.xlsx' !
+        else:
+            bdi = pd.read_excel(op.join(beh_dir, 'BDI.xlsx'), header=None,
+                                names=['ID', 'BDI-I'])
         bdi.loc[:, 'DIAGNOZA'] = False
     if study == 'C':
         df = pd.read_excel(op.join(beh_dir, 'BAZA_DANYCH.xlsx'))
-        bdi = df[['ID', 'BDI-II', 'DIAGNOZA']]
+        if full_table:
+            bdi = study_C_reformat_beh_table(df)
+        else:
+            bdi = df[['ID', 'BDI-II', 'DIAGNOZA']]
 
-        # silence false alarm SettingWithCopyWarnings:
-        with warnings.catch_warnings():
-            irritating_warning = pd.core.common.SettingWithCopyWarning
-            warnings.simplefilter('ignore', irritating_warning)
-            bdi.loc[:, 'DIAGNOZA'] = bdi['DIAGNOZA'].astype('bool')
+        bdi = make_sure_diagnosis_is_boolean(bdi)
+
     return bdi.set_index('ID')
+
+
+def study_C_reformat_beh_table(df):
+    '''Select and recode relevant columns from behavioral table.'''
+    # select relevant columns
+    df = df[['ID', 'DATA BADANIA', 'WIEK', 'PŁEĆ', 'WYKSZTAŁCENIE',
+          'DIAGNOZA', 'BDI-II']]
+    # fix dates
+    df.loc[0, 'DATA BADANIA'] = df.loc[1, 'DATA BADANIA']
+    df.loc[7, 'WIEK'] = datetime.datetime(df.loc[7, 'WIEK'], 6, 25)
+    df.loc[21, 'WIEK'] = datetime.datetime(df.loc[21, 'WIEK'], 6, 25)
+
+    # age
+    # ---
+    # calculate age
+    for idx in df.index:
+        delta = relativedelta(df.loc[idx, 'DATA BADANIA'], df.loc[idx, 'WIEK'])
+        df.loc[idx, 'wiek'] = delta.years
+
+    # one bad birth date (the same as study date) - use average
+    # student age (participant was a student)
+    avg_student_age = df.query('WYKSZTAŁCENIE == "Student"').wiek.mean()
+    df.loc[9, 'wiek'] = int(avg_student_age)
+
+    # education
+    # ---------
+    # fix one missing education - insert most common answer
+    df.loc[85, 'WYKSZTAŁCENIE'] = 'Średnie'
+
+    # remove 'DATA BADANIA' and 'WIEK'
+    bdi = df.drop(['DATA BADANIA', 'WIEK'], axis='columns')
+
+
+def make_sure_diagnosis_is_boolean(bdi):
+    # silence false alarm SettingWithCopyWarnings:
+    with warnings.catch_warnings():
+        irritating_warning = pd.core.common.SettingWithCopyWarning
+        warnings.simplefilter('ignore', irritating_warning)
+        bdi.loc[:, 'DIAGNOZA'] = bdi.DIAGNOZA.astype('bool')
+    return bdi
 
 
 def load_chanord(paths, study=None, **kwargs):
@@ -88,7 +150,6 @@ def load_forward(paths, study=None, **kwargs):
             op.join(fwd_dir, 'DiamSar-fsaverage-oct-6-fwd.fif'), verbose=False)
 
 
-# - [ ] does not seem to be used anywhere in DiamSar, remove?
 def load_src_sym(paths, **kwargs):
     import mne
     src_dir = paths.get_path('fwd')
