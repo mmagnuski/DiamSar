@@ -39,7 +39,7 @@ def read_bdi(paths, study='C', **kwargs):
 
     if study == 'B':
         # FIXME: B has weird folder structure
-        beh_dir = op.join(base_dir, 'porządki liniowe dźwiekowe + rest', 'beh')
+        beh_dir = op.join(base_dir, 'beh')
         if full_table:
             bdi = pd.read_excel(op.join(beh_dir, 'BAZA DANYCH.xlsx'))
             sel_col = ['BDI 2-pomiar wynik', 'wykształcenie', 'wiek', 'płeć']
@@ -66,7 +66,7 @@ def study_C_reformat_beh_table(df):
     '''Select and recode relevant columns from behavioral table.'''
     # select relevant columns
     df = df[['ID', 'DATA BADANIA', 'WIEK', 'PŁEĆ', 'WYKSZTAŁCENIE',
-          'DIAGNOZA', 'BDI-II']]
+             'DIAGNOZA', 'BDI-II']]
     # fix dates
     df.loc[0, 'DATA BADANIA'] = df.loc[1, 'DATA BADANIA']
     df.loc[7, 'WIEK'] = datetime.datetime(df.loc[7, 'WIEK'], 6, 25)
@@ -91,6 +91,7 @@ def study_C_reformat_beh_table(df):
 
     # remove 'DATA BADANIA' and 'WIEK'
     bdi = df.drop(['DATA BADANIA', 'WIEK'], axis='columns')
+    return bdi
 
 
 def make_sure_diagnosis_is_boolean(bdi):
@@ -144,7 +145,7 @@ def load_forward(paths, study=None, **kwargs):
         fwd_dir = paths.get_path('fwd')
         return mne.read_forward_solution(
             op.join(fwd_dir, 'DiamSar-eeg-oct-6-fwd.fif'), verbose=False)
-    elif study == 'A':
+    elif study in ['A', 'B']:
         fwd_dir = op.join(paths.get_path('eeg', study='A'), 'src')
         return mne.read_forward_solution(
             op.join(fwd_dir, 'DiamSar-fsaverage-oct-6-fwd.fif'), verbose=False)
