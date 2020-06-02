@@ -27,15 +27,16 @@ def read_bdi(paths, study='C', **kwargs):
 
         if full_table:
             select_col += ['plec_k', 'wiek']
-            rename_col['plec_k'] = 'PŁEĆ'
+            rename_col.update({'plec_k': 'sex', 'wiek': 'age'})
 
         bdi = df[select_col]
         bdi = make_sure_diagnosis_is_boolean(bdi)
         bdi = bdi.rename(columns=rename_col)
 
+        # ! TODO make sure that sex is coded this way
         if full_table:
-            relabel = {1: 'KOBIETA', 2: 'MĘŻCZYZNA'}
-            bdi.loc[:, 'PŁEĆ'] = df.PŁEĆ.replace(relabel)
+            relabel = {1: 'female', 2: 'male'}
+            bdi.loc[:, 'sex'] = bdi.sex.replace(relabel)
 
     if study == 'B':
         # FIXME: B has weird folder structure
@@ -45,6 +46,11 @@ def read_bdi(paths, study='C', **kwargs):
             sel_col = ['BDI 2-pomiar wynik', 'wykształcenie', 'wiek', 'płeć']
             # has also 'problemy ze snem', 'miasto'
             bdi = bdi[sel_col]
+
+            # rename columns
+            rename_col = {'wiek': 'age', 'płeć': 'sex',
+                          'wykształcenie': 'education'}
+            bdi = bdi.rename(columns=rename_col)
             # ! check ID with 'BDI.xlsx' !
         else:
             bdi = pd.read_excel(op.join(beh_dir, 'BDI.xlsx'), header=None,
