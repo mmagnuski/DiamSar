@@ -18,8 +18,6 @@ from .io import (read_bdi, set_or_join_annot,
                  warnings_to_ignore_when_reading_files)
 
 
-# TODO:
-# - [ ] what should we read when `src` space is chosen (raw, events, fwd)?
 def read_raw(fname, study='C', task='rest', space='avg'):
     '''
     Read a raw file and its events using the DiamSar reading pipeline.
@@ -116,6 +114,7 @@ def read_raw(fname, study='C', task='rest', space='avg'):
                 sys._enablelegacywindowsfsencoding()
 
         # read annotations
+        # FIXME: could use encoding='ANSI' for study B?
         annot = read_rej(op.join(data_path, rej_file), raw.info['sfreq'])
 
         # set annotations or add to those already present

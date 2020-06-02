@@ -15,9 +15,7 @@ global files_id_mode
 files = dict()
 paths = Paths()
 
-# make paths work for non-dropbox installations:
 # - [?] create a diagram with study paths
-# - [ ] should paths be also global in __init__.py?
 
 
 # study C
@@ -60,13 +58,13 @@ def set_paths(base_dir=None):
     # -------
     base_dir = paths.get_path('base')
     paths.register_study('B', tasks=['rest', 'linord'])
-    study_B_path = Path(base_dir, 'Wronski')
+    study_B_path = Path(base_dir, 'Wronski',
+                        'porządki liniowe dźwiekowe + rest')
     has_B = study_B_path.exists()
 
     if has_B:
         paths.add_path('main', study_B_path, study='B')
-        paths.add_path('eeg', Path('porządki liniowe dźwiekowe + rest', 'eeg'),
-                       study='B')
+        paths.add_path('eeg', 'eeg', study='B')
 
         # task-specific
         for task in ['rest']:
@@ -127,6 +125,7 @@ def set_paths(base_dir=None):
             paths.register_data('psd', load_psd, study=study, cache=False)
 
     paths.register_data('fwd', load_forward, study='C')
+    paths.register_data('fwd', load_forward, study='B')
     paths.register_data('fwd', load_forward, study='A')
     paths.register_data('src_sym', load_src_sym, study='C')
 
