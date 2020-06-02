@@ -234,7 +234,6 @@ def compute_all_rest(study='C', event_id=None, tmin=1., tmax=60., winlen=2.,
 # TODO:
 # - [ ] why make_csd_rest_approx did not return NaNs for the subject that
 #       has NaNs both in channel data and make_csd_morlet_raw?
-# - [x] compare csd's between cnt and raw versions
 def make_csd_rest_approx(raw, frequencies, events=None, event_id=None,
                          tmin=None, tmax=None, n_jobs=1, n_cycles=7.,
                          decim=4, segment_length=1.):

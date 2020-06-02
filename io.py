@@ -146,7 +146,7 @@ def load_forward(paths, study=None, **kwargs):
         return mne.read_forward_solution(
             op.join(fwd_dir, 'DiamSar-eeg-oct-6-fwd.fif'), verbose=False)
     elif study in ['A', 'B']:
-        fwd_dir = op.join(paths.get_path('eeg', study='A'), 'src')
+        fwd_dir = op.join(paths.get_path('eeg', study=study), 'src')
         return mne.read_forward_solution(
             op.join(fwd_dir, 'DiamSar-fsaverage-oct-6-fwd.fif'), verbose=False)
 

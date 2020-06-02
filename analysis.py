@@ -98,9 +98,6 @@ def run_analysis(study='C', contrast='cvsc', eyes='closed', space='avg',
     if 'pairs' not in selection:
         adjacency = get_adjacency(study, space, ch_names, selection, src)
 
-    # TODO: this is actually not required?
-    #       transposing psds, saving the transpose
-    #       and then transposing back here does not make much sense
     # put spatial dimension last for cluster-based test
     if not avg_freq or psd.ndim == 3:
         psd = psd.transpose((0, 2, 1))
