@@ -177,6 +177,8 @@ def plot_multi_topo(psds_avg, info_frontal, info_asy):
     return fig, axs
 
 
+# - [ ] consider adding CI per swarm
+# - [ ] consider adding effsize and bootstrapped CIs
 def plot_swarm(df, ax=None, ygrid=True):
     '''
     Swarmplot for single channel pairs asymmetry. Used for group contrast
@@ -286,6 +288,7 @@ def plot_swarm_grid(study, space, contrast):
     return fig
 
 
+# - [ ] compare and merge with the function in utils
 def create_swarm_df(psd_high, psd_low):
     df_list = list()
     groups = ['diag'] * psd_high.shape[0] + ['hc'] * psd_low.shape[0]
@@ -333,22 +336,22 @@ def plot_heatmap_add1(clst):
         idx1, idx2 = 1, 0
 
     # topo 1
-    mark_kwargs = {'markersize': 8}
+    mark_kwargs = {'markersize': scale['markersize']}
     topo_args = dict(vmin=-4, vmax=4, mark_clst_prop=0.3,
                      mark_kwargs=mark_kwargs, border='mean')
     tp1 = clst.plot(cluster_idx=idx1, freq=freqs1, axes=f_ax2, **topo_args)
-    tp1.axes.set_title(freqlabel1, fontsize=18)
+    tp1.axes.set_title(freqlabel1, fontsize=scale['topo_title'])
 
     # topo 2
     tp2 = clst.plot(cluster_idx=idx2, freq=freqs2, axes=f_ax3, **topo_args)
-    tp2.axes.set_title(freqlabel2, fontsize=18)
+    tp2.axes.set_title(freqlabel2, fontsize=scale['topo_title'])
 
     obj_dict = {'heatmap': f_ax1, 'colorbar': cbar_ax, 'topo1': tp1,
                 'topo2': tp2}
     return fig, obj_dict
 
 
-def bdi_bdi_histogram(bdi):
+def bdi_histogram(bdi):
     '''Plot BDI histogram from ``bdi`` dataframe of given study.'''
     msk = bdi.DIAGNOZA
     bdi_col = [c for c in bdi.columns if 'BDI' in c][0]
@@ -394,7 +397,7 @@ def plot_panel(bdi, bar_h=0.6, seed=22):
 
     # regression data
     noise = random_state.uniform(low=0, high=10, size=bdi.shape[0])
-    y = bdi['BDI-II'].values * 0.1 + noise
+    y = bdi['BDI-II'].values * - 0.1 + noise
     bdi.loc[:, 'y'] = y
 
     # regression groups
@@ -457,7 +460,7 @@ def plot_panel(bdi, bar_h=0.6, seed=22):
     # ----------
     axs[0, 1].set_ylabel("")
     axs[0, 1].set_xticklabels([])
-    axs[0, 1].set_xlabel('BDI')
+    axs[0, 1].set_xlabel('BDI', fontsize=17)
 
     for ax in axs[0, :]:
         # equal tick spacing through data range
@@ -472,7 +475,7 @@ def plot_panel(bdi, bar_h=0.6, seed=22):
     for ax in axs[1, :]:
         # limits, labels and ticks
         ax.set_xlim((0, 50))
-        ax.set_xlabel('BDI')
+        ax.set_xlabel('BDI', fontsize=17)
         ax.set_ylabel('')
         ax.set_xticks([0, 10, 20, 30, 40, 50])
 
@@ -484,6 +487,8 @@ def plot_panel(bdi, bar_h=0.6, seed=22):
         # add grid
         ax.xaxis.grid(color=[0.88, 0.88, 0.88], linewidth=2,
                       zorder=0, linestyle='--')
+
+    axs[0, 0].set_xticklabels(['diagnosed', 'healthy\ncontrols'], fontsize=17)
 
     axs[1, 0].set_ylim((-2.5, -0.5))
     axs[1, 0].set_yticks([cntr2, cntr1])

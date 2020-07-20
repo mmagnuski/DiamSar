@@ -12,9 +12,11 @@ import mne
 
 # load functions
 # --------------
-# - [ ] add load montage?
+# most of the functions here are accessed via:
+# paths.get_data(data_type, study=study)
+# where ``paths`` is ``DiamSar.pth.paths``
 
-# FIXME - use in register mode
+# FIXME - use in register mode (CHECK - did I mean .get_data(), is it already done?)
 def read_bdi(paths, study='C', **kwargs):
     '''Read BDI scores.'''
     full_table = kwargs.get('full_table', False)
