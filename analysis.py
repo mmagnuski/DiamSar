@@ -160,96 +160,6 @@ def run_analysis(study='C', contrast='cvsc', eyes='closed', space='avg',
         return stat_info
 
 
-def save_stat(stat, save_dir='stats'):
-    '''
-    Save stat_info dictionary or Clusters object with default name and to
-    default directory.
-    '''
-    from borsar.cluster import Clusters
-
-    save_dir = op.join(pth.paths.get_path('main', study='C'), 'analysis',
-                       save_dir)
-    fname = ('stat_study-{}_eyes-{}_space-{}_contrast-{}_selection-{}'
-             '_freqrange-{}_avgfreq-{}_transform-{}_divbysum-{}.hdf5')
-    keys = ['study', 'eyes', 'space', 'contrast', 'selection', 'freq_range',
-            'avg_freq', 'transform', 'div_by_sum']
-
-    if isinstance(stat, Clusters):
-        fname = fname.format(*[stat.description[k] for k in keys])
-        full_path = op.join(save_dir, fname)
-        stat.save(full_path)
-    else:
-        from mne.externals import h5io
-        fname = fname.format(*[stat[k] for k in keys])
-        full_path = op.join(save_dir, fname)
-        h5io.write_hdf5(full_path, stat)
-
-
-# TODO: add option to read source space Clusters
-def load_stat(fname=None, study='C', eyes='closed', space='avg',
-              contrast='cvsd', selection='asy_frontal', freq_range=(8, 13),
-              avg_freq=True, transform='log', div_by_sum=False,
-              stat_dir=None):
-    '''Read previously saved analysis result.
-
-    Parameters
-    ----------
-    fname : str
-        Name of the file. If ``None`` then it is constructed from other
-        kwargs.
-    **kwargs
-        Other keyword arguments are the same as in ``run_analysis``.
-
-    Returns
-    -------
-    stat : borsar.cluster.Clusters | dict
-        Analysis results.
-    '''
-
-    # if fname is not specified, construct
-    if fname is None:
-        stat_dir = 'stats' if stat_dir is None else stat_dir
-        fname = ('stat_study-{}_eyes-{}_space-{}_contrast-{}_selection-{}'
-                 '_freqrange-{}_avgfreq-{}_transform-{}_divbysum-{}.hdf5')
-        vars = [study, eyes, space, contrast, selection, freq_range,
-                avg_freq, transform, div_by_sum]
-        fname = fname.format(*vars)
-        stat_dir = op.join(pth.paths.get_path('main', 'C'), 'analysis',
-                           stat_dir)
-        fname = op.join(stat_dir, fname)
-
-    return _load_stat(fname)
-
-
-def _load_stat(fname):
-    from mne.externals import h5io
-
-    stat = h5io.read_hdf5(fname)
-    if 'clusters' in stat:
-        from borsar.cluster import Clusters
-
-        study = stat['description']['study']
-        if 'src' in fname:
-            info = None
-            # FIXME: src should be different when 'asy'
-            src = pth.paths.get_data('fwd', study=study)['src']
-            selection = stat['description']['selection']
-            subject = 'fsaverage_sym' if 'asy' in selection else 'fsaverage'
-            subjects_dir = pth.paths.get_path('subjects_dir')
-        else:
-            src = None
-            info = pth.paths.get_data('info', study=study)
-            subject, subjects_dir = None, None
-
-        clst = Clusters(stat['stat'], stat['clusters'], stat['pvals'],
-                        dimnames=stat['dimnames'], dimcoords=stat['dimcoords'],
-                        info=info, src=src, description=stat['description'],
-                        subject=subject, subjects_dir=subjects_dir)
-        return clst
-    else:
-        return stat
-
-
 def summarize_stats(split=True, reduce_columns=True, stat_dir='stats'):
     '''Summarize multiple analyses (saved in analysis dir) in a dataframe.
 
@@ -548,3 +458,93 @@ def get_space_info(study, space, ch_names, selection):
             src = pth.paths.get_data('fwd', study=study)['src']
 
     return info, src, subject, subjects_dir
+
+
+def save_stat(stat, save_dir='stats'):
+    '''
+    Save stat_info dictionary or Clusters object with default name and to
+    default directory.
+    '''
+    from borsar.cluster import Clusters
+
+    save_dir = op.join(pth.paths.get_path('main', study='C'), 'analysis',
+                       save_dir)
+    fname = ('stat_study-{}_eyes-{}_space-{}_contrast-{}_selection-{}'
+             '_freqrange-{}_avgfreq-{}_transform-{}_divbysum-{}.hdf5')
+    keys = ['study', 'eyes', 'space', 'contrast', 'selection', 'freq_range',
+            'avg_freq', 'transform', 'div_by_sum']
+
+    if isinstance(stat, Clusters):
+        fname = fname.format(*[stat.description[k] for k in keys])
+        full_path = op.join(save_dir, fname)
+        stat.save(full_path)
+    else:
+        from mne.externals import h5io
+        fname = fname.format(*[stat[k] for k in keys])
+        full_path = op.join(save_dir, fname)
+        h5io.write_hdf5(full_path, stat)
+
+
+# TODO: add option to read source space Clusters
+def load_stat(fname=None, study='C', eyes='closed', space='avg',
+              contrast='cvsd', selection='asy_frontal', freq_range=(8, 13),
+              avg_freq=True, transform='log', div_by_sum=False,
+              stat_dir=None):
+    '''Read previously saved analysis result.
+
+    Parameters
+    ----------
+    fname : str
+        Name of the file. If ``None`` then it is constructed from other
+        kwargs.
+    **kwargs
+        Other keyword arguments are the same as in ``run_analysis``.
+
+    Returns
+    -------
+    stat : borsar.cluster.Clusters | dict
+        Analysis results.
+    '''
+
+    # if fname is not specified, construct
+    if fname is None:
+        stat_dir = 'stats' if stat_dir is None else stat_dir
+        fname = ('stat_study-{}_eyes-{}_space-{}_contrast-{}_selection-{}'
+                 '_freqrange-{}_avgfreq-{}_transform-{}_divbysum-{}.hdf5')
+        vars = [study, eyes, space, contrast, selection, freq_range,
+                avg_freq, transform, div_by_sum]
+        fname = fname.format(*vars)
+        stat_dir = op.join(pth.paths.get_path('main', 'C'), 'analysis',
+                           stat_dir)
+        fname = op.join(stat_dir, fname)
+
+    return _load_stat(fname)
+
+
+def _load_stat(fname):
+    from mne.externals import h5io
+
+    stat = h5io.read_hdf5(fname)
+    if 'clusters' in stat:
+        from borsar.cluster import Clusters
+
+        study = stat['description']['study']
+        if 'src' in fname:
+            info = None
+            # FIXME: src should be different when 'asy'
+            src = pth.paths.get_data('fwd', study=study)['src']
+            selection = stat['description']['selection']
+            subject = 'fsaverage_sym' if 'asy' in selection else 'fsaverage'
+            subjects_dir = pth.paths.get_path('subjects_dir')
+        else:
+            src = None
+            info = pth.paths.get_data('info', study=study)
+            subject, subjects_dir = None, None
+
+        clst = Clusters(stat['stat'], stat['clusters'], stat['pvals'],
+                        dimnames=stat['dimnames'], dimcoords=stat['dimcoords'],
+                        info=info, src=src, description=stat['description'],
+                        subject=subject, subjects_dir=subjects_dir)
+        return clst
+    else:
+        return stat

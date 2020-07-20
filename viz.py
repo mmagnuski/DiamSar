@@ -124,11 +124,16 @@ def plot_grid_cluster(stats_clst, contrast, vlim=3):
     plt.text(0.03, mid_y, 'REFERENCE', va='center', ha='center',
              transform=fig.transFigure, fontsize=21, rotation=90)
 
+    cntrst = utils.translate_contrast[contrast]
+    fig.suptitle('{} contrast'.format(cntrst), fontsize=22, fontweight='bold')
+    fig.text(0.5, 0.895, 'cluster-based permutation test results', fontsize=21,
+             va='center', ha='center')
+
     return fig
 
 
 def plot_multi_topo(psds_avg, info_frontal, info_asy):
-    '''Creating combined Topo object for multiple psds'''
+    '''Creating combined Topo object for multiple psds.'''
     axis_limit = 2.25
     fig = plt.figure(figsize=(7, 6))
     axs = prepare_equal_axes(fig, [2, 2], space=[0.12, 0.8, 0.02, 0.85],
