@@ -52,8 +52,8 @@ def plot_grid_cluster(stats_clst, contrast, vlim=3):
     fig : matplotlib.Figure
         Matplotlib figure with visualized results.
     '''
-    fig = plt.figure(figsize=(9, 6))
-    ax = prepare_equal_axes(fig, [2, 3], space=[0.12, 0.85, 0.02, 0.8])
+    fig = plt.figure(figsize=(9, 7.5))
+    ax = prepare_equal_axes(fig, [2, 3], space=[0.12, 0.85, 0.02, 0.65])
 
     example_stat = load_stat(study='C', contrast='cvsd', space='avg')
     vmin, vmax = -vlim, vlim
@@ -90,7 +90,7 @@ def plot_grid_cluster(stats_clst, contrast, vlim=3):
             this_ax.set_xlim((-axis_limit, axis_limit))
 
     # add colorbar
-    cbar_ax = fig.add_axes([0.87, 0.08, 0.03, 0.67])
+    cbar_ax = fig.add_axes([0.87, 0.08, 0.03, 0.55])
     cbar = plt.colorbar(mappable=topo.img, cax=cbar_ax)
     cbar.set_label('t values', fontsize=12)
 
@@ -101,11 +101,11 @@ def plot_grid_cluster(stats_clst, contrast, vlim=3):
         box = this_ax.get_position()
         mid_x = box.corners()[:, 0].mean()
 
-        plt.text(mid_x, 0.87, letter, va='center', ha='center',
+        plt.text(mid_x, 0.72, letter, va='center', ha='center',
                  transform=fig.transFigure, fontsize=21)
 
         if idx == 1:
-            plt.text(mid_x, 0.935, 'STUDY', va='center', ha='center',
+            plt.text(mid_x, 0.8, 'STUDY', va='center', ha='center',
                      transform=fig.transFigure, fontsize=21)
 
     # add reference labels
