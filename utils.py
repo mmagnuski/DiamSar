@@ -69,6 +69,9 @@ def group_bdi(subj_id, bdi, method='cvsc', lower_threshold=None,
     bdi = bdi.loc[sid, :]
     bdi_col = 'BDI-II' if 'BDI-II' in bdi.columns else 'BDI-I'
 
+    if method not in ['cvsd', 'cvsc', 'dreg', 'creg', 'cdreg']:
+        raise ValueError('Unexpected method: {}'.format(method))
+
     if method == 'cvsc':
         bdi_sel = bdi.loc[~bdi.DIAGNOZA, bdi_col].values
         lower_threshold = _check_threshold(lower_threshold, bdi_sel, 5)

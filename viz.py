@@ -9,7 +9,7 @@ from borsar.viz import Topo
 
 from sarna.viz import prepare_equal_axes
 
-from . import freq
+from . import freq, analysis, utils
 from .analysis import load_stat
 from .utils import colors
 
@@ -641,3 +641,182 @@ def _create_group_rectangles(bar1y, bar2y, bar_h, second_min_diag_bdi,
     rct4 = plt.Rectangle((10, bar2y), 40, bar_h,
                          color=colors['subdiag'], zorder=5)
     return [rct1, rct2, rct3, rct4]
+
+
+def _pairs_aggregated_studies(space, contrast):
+    '''
+    Read all studies that include given contrast and aggregate their data.
+
+    Used when plotting aggregated channel pairs figures (``plot_aggregated``).
+    '''
+    if contrast in ['cvsd', 'dreg']:
+        studies = ['A', 'C']
+    elif contrast in ['cvsc', 'creg']:
+        studies = ['B', 'C']
+    elif contrast ==  'cdreg':
+        studies = ['C']
+
+    psds = {'high': list(), 'low': list()}
+    for study in studies:
+        psd_high, psd_low, ch_names = freq.get_psds(
+                            selection='asy_pairs', study=study,
+                            space=space, contrast=contrast)
+        psds['low'].append(psd_low)
+        psds['high'].append(psd_high)
+
+    low = np.concatenate(psds['low'], axis=0)
+    high = np.concatenate(psds['high'], axis=0)
+
+    studies = [utils.utils.translate_study[std] for std in studies]
+    return high, low, studies, ch_names
+
+
+def _compute_stats_group(high, low, ch_idx=0):
+    '''Used when plotting aggregated channel pairs figures
+    (``plot_aggregated``).'''
+    from scipy.stats import ttest_ind
+    stats = analysis.esci_indep_cohens_d(
+        high[:, ch_idx], low[:, ch_idx])
+
+    nx, ny = high.shape[0], low.shape[0]
+    t, p = ttest_ind(high[:, ch_idx], low[:, ch_idx])
+    out = pg.bayesfactor_ttest(t, nx, ny, paired=False)
+    bf01 = 1 / float(out)
+    stats.update({'bf01': bf01})
+
+    return stats
+
+
+def _compute_stats_regression(data1, data2, ch_idx=0):
+    '''Used when plotting aggregated channel pairs figures
+    (``plot_aggregated``).'''
+    stats = analysis.esci_regression_r(data1[:, ch_idx], data2)
+
+    nx = data1.shape[0]
+    out = pg.bayesfactor_pearson(stats['es'], nx)
+    bf01 = 1 / float(out)
+    stats.update({'bf01': bf01})
+
+    return stats
+
+
+def _plot_dist_esci(ax, ypos, stats, color=None):
+    '''Plots a single bootstraps distribution along with effect size and
+    bootstrap confidence interval for the effect size.
+
+    Used when plotting aggregated channel pairs figures (``plot_aggregated``).
+    '''
+    from dabest.plot_tools import halfviolin
+
+    color = color if color is not None else ds.utils.colors['hc']
+
+    v = ax.violinplot(stats['bootstraps'], positions=[ypos],
+                      showextrema=False, showmedians=False,
+                      widths=0.5, vert=False)
+    halfviolin(v, fill_color=color, alpha=0.85, half='top')
+
+    line_color = np.array([0] * 3) / 255
+    ax.plot(stats['es'], [ypos], marker='o', color=line_color,
+                       markersize=12, zorder=6)
+    ax.plot(stats['ci'], [ypos, ypos], linestyle="-", color=line_color,
+            linewidth=3.5, zorder=5)
+    return v
+
+
+def plot_aggregated(ax=None, eff='d'):
+    '''Plot aggregated effect sizes for channel pairs analyses.
+
+    ax: matplotlib axis
+        Axis to plot to.
+        Should look good in the following setup:
+        ```python
+        ```
+    eff: str
+        Effect size to plot. ``'r'`` shows effects for linear relationship
+        analyses with Pearson's r as the effect size. ``'d'`` shows effects for
+        group contrasts with Cohen's d as the effect size.
+
+    Returns
+    -------
+    ax: matplotlib axis
+        Axis used to plot to.
+    '''
+
+    if ax is None:
+        fig_size = (11, 13.5) if eff == 'r' else (11, 12)
+        gridspec = ({'left': 0.25, 'bottom': 0.1, 'right': 0.85} if eff == 'r'
+                    else {'left': 0.18, 'bottom': 0.1, 'right': 0.8})
+        fig, ax = plt.subplots(figsize=fig_size, gridspec_kw=gridspec)
+
+    ypos = 5
+    labels_pos = list()
+    labels = list()
+
+    # 'd' vs 'r' effect size (group contrasts vs linear relationships)
+    addpos = 0.09 if eff == 'd' else 0.06
+    stat_fun = (_compute_stats_group if eff == 'd'
+                else _compute_stats_regression)
+    distr_color = (ds.utils.colors['hc'] if eff == 'd'
+                   else ds.utils.colors['subdiag'])
+    contrasts = ['cvsd', 'cvsc'] if eff == 'd' else ['dreg', 'creg', 'cdreg']
+
+    for contrast in contrasts:
+        for space in ['avg', 'csd']:
+            # get relevant data
+            high, low, studies, ch_names = _pairs_aggregated_studies(
+                space, contrast)
+
+            # channel pair loop
+            for ch_idx in range(2):
+                # compute es, bootstrap esci and bf01
+                stats = stat_fun(high, low, ch_idx=ch_idx)
+
+                # plot distribution, ES and CI
+                v = _plot_dist_esci(ax, ypos, stats, color=distr_color)
+                v['bodies'][0].set_zorder(4)
+
+                # slight y tick labeling differences
+                if len(studies) == 2:
+                    label_schematic = ('{}, {}\n{}\nstudies {} & {}'
+                                       if eff == 'd'
+                                       else '{}, {}\n{}, studies {} & {}')
+                    label = label_schematic.format(
+                        utils.translate_contrast[contrast], space.upper(),
+                        ch_names[ch_idx], studies[0], studies[1])
+                else:
+                    label = '{}, {}\n{}, study {}'.format(
+                        utils.translate_contrast[contrast], space.upper(),
+                        ch_names[ch_idx], studies[0])
+
+                labels_pos.append(ypos)
+                labels.append(label)
+
+                # add bf01 text:
+                bf_text = '{:.2f}'.format(stats['bf01'])
+                ax.text(stats['es'], ypos + addpos, bf_text, fontsize=16,
+                        horizontalalignment='center', color='w', zorder=7)
+
+                ypos -= 0.5
+
+    # aesthetics
+    # ----------
+    lims = (-1.25, 1.25) if eff == 'd' else (-0.7, 0.7)
+    xticks = ([-1, -0.5, 0, 0.5, 1] if eff == 'd'
+              else [-0.6, -0.3, 0, 0.3, 0.6])
+    xlab = ("Effect size\n(Cohen's d)" if eff == 'd'
+            else "Effect size\n(Pearson's r)")
+    cntr = 'group contrasts' if eff == 'd' else 'linear relationships'
+
+    ax.set_xlim(lims)
+    plt.yticks(labels_pos, labels, fontsize=15)
+    plt.xticks(xticks, fontsize=15)
+    ylim = ax.get_ylim()
+
+    ax.grid(color=[0.85, 0.85, 0.85], linewidth=1.5, linestyle='--')
+    ax.vlines(0, ymin=ylim[0], ymax=ylim[1], color=[0.5] * 3, lw=2.5)
+    ax.set_ylim(ylim) # make sure vlines do not change y lims
+
+    ax.set_xlabel(xlab, fontsize=20)
+    ax.set_title('Aggregated channel pair results\nfor {}'.format(cntr),
+                 fontsize=24, pad=25)
+    return ax
