@@ -6,13 +6,12 @@ from scipy import sparse
 
 from borsar.cluster import construct_adjacency_matrix
 
+from . import io
 from . import pth
 from . import utils
-from .freq import format_psds
+from .freq import format_psds, get_psds
 
 
-# TODO:
-# - [ ] add logging and verbose option? - use mne python's?
 def run_analysis(study='C', contrast='cvsc', eyes='closed', space='avg',
                  freq_range=(8, 13), avg_freq=True, selection='frontal_asy',
                  div_by_sum=False, transform='log', n_permutations=10000,
@@ -250,6 +249,130 @@ def summarize_stats(split=True, reduce_columns=True, stat_dir='stats'):
         return df1, df2
     else:
         return df
+
+
+def summarize_ch_pair_stats(reduce_columns=True, stat_dir='stats',
+                            progressbar='text'):
+    '''Summarize multiple channel pair analyses (saved in analysis dir) in a
+    dataframe.
+
+    This takes longer than ``summarize_stats`` because it adds effect sizes and
+    bootstrap confidence intervals for effect sizes.
+
+    Parameters
+    ----------
+    reduce_columns : bool
+        Whether to remove columns with no variability from the output. Defaults
+        to ``True``.
+
+    Returns
+    -------
+    df : pandas.DataFrame
+        Dataframe with summarized results.
+    '''
+    from mne.externals import h5io
+    from DiamSar.utils import progressbar as pbarobj
+
+    stat_dir = op.join(pth.paths.get_path('main', 'C'), 'analysis', stat_dir)
+    stat_files = [f for f in os.listdir(stat_dir) if f.endswith('.hdf5')
+                  and 'asy_pairs' in f]
+    n_stat = len(stat_files)
+
+    # first, create an empty dataframe
+    stat_params = ['study', 'contrast', 'space', 'ch_pair', 'N_low', 'N_high',
+                   'N_all', 'eyes', 'selection', 'freq_range', 'avg_freq',
+                   'transform', 'div_by_sum']
+    stats = ['t', 'p', 'es', 'ci']
+    stat_summary = [x + ' 1' for x in stats] + [x + ' 2' for x in stats]
+    df = pd.DataFrame(index=np.arange(1, n_stat + 1),
+                      columns=stat_params + stat_summary)
+
+    pbar = pbarobj(progressbar, n_stat * 2)
+    for idx, fname in enumerate(stat_files, start=1):
+        stat = h5io.read_hdf5(op.join(stat_dir, fname))
+
+        for col in stat_params:
+            df.loc[idx, col] = stat[col] if col in stat else np.nan
+
+        # for ES and CI we need the original data:
+        params = ['study', 'space', 'contrast']
+        study, space, contrast = [stat[param] for param in params]
+        loaded = get_psds(selection='asy_pairs', study=study,
+                          space=space, contrast=contrast)
+
+        # add stats
+        for ch_idx in range(2):
+            stat_col = ch_idx * 4
+            t, p = stat['stat'][ch_idx], stat['pval'][ch_idx]
+            df.loc[idx, stat_summary[stat_col]] = t
+            df.loc[idx, stat_summary[stat_col + 1]] = p
+
+            if 'vs' in contrast:
+                psd_high, psd_low, ch_names = loaded
+                nx, ny = psd_high.shape[0], psd_low.shape[0]
+                esci = esci_indep_cohens_d(psd_high[:, ch_idx],
+                                           psd_low[:, ch_idx])
+            else:
+                psd_sel, info_sel, bdi_sel = loaded
+                esci = esci_regression_r(psd_sel[:, ch_idx], bdi_sel)
+
+            df.loc[idx, stat_summary[stat_col + 2]] = esci['es']
+            df.loc[idx, stat_summary[stat_col + 3]] = esci['ci']
+            pbar.update(1)
+
+    pbar.close()
+
+    # split into two dfs
+    pair_rows = df['selection'].str.contains('pairs').values
+    pair_rows = pair_rows == True
+    df = df.loc[pair_rows, :].reset_index(drop=True)
+
+    df = remove_columns_with_no_variability(df)
+    df = utils.reformat_stat_table(df)
+
+    return df
+
+
+def esci_indep_cohens_d(data1, data2, n_boot=5000):
+    '''Compute Cohen's d effect size and its bootstrap 95% confidence interval.
+    (using bias corrected accelerated bootstrap)'''
+    import dabest
+    df = utils.psd_to_df(data1, data2)
+    dbst_set = dabest.load(df, idx=("controls", "diagnosed"),
+                           x="group", y="FAA", resamples=n_boot)
+    results = dbst_set.cohens_d.results
+    cohen_d = results.difference.values[0]
+    cohen_d_ci = (results.bca_low.values[0], results.bca_high.values[0])
+    bootstraps = results.bootstraps[0]
+    stats = dict(es=cohen_d, ci=cohen_d_ci, bootstraps=bootstraps)
+    return stats
+
+
+def esci_regression_r(x, y, n_boot=5000):
+    '''Compute Pearson's r effect size and its bootstrap 95% confidence
+    interval (using bias corrected accelerated bootstrap).'''
+    # use pearson correlation
+    from scipy.stats import pearsonr
+    import scikits.bootstrap as boot
+
+    def corr(x, y):
+        return pearsonr(x, y)[0]
+
+    r = corr(x, y)
+    stats = dict(es=r)
+    try:
+        # currently this is available only on my branch of scikits-bootstrap
+        # but I'll prepare a PR to the github repo, and it will be available
+        # when/if it gets accepted
+        r_ci, bootstraps = boot.ci((x, y), corr, multi=True, n_samples=n_boot,
+                                   return_dist=True)
+        stats.update(bootstraps=bootstraps)
+    except TypeError:
+        # branch of boot.ci with return_dist not available, use normal boot:
+        print('Oh no!')
+        r_ci = boot.ci((x, y), corr, multi=True, n_samples=n_boot)
+    stats.update(ci=r_ci)
+    return stats
 
 
 def remove_columns_with_no_variability(df):

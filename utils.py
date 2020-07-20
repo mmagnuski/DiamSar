@@ -174,10 +174,25 @@ def reformat_stat_table(tbl):
                 if not isinstance(val, str):
                     tbl2.loc[idx, col] = '{:.3f}'.format(val)
         else:
-            # for pairs
-            for col in ['t 1', 'p 1', 't 2', 'p 2']:
+            # for channel pairs
+            cols = ['t', 'p', 'es', 'ci']
+            cols = [c + ' 1' for c in cols] + [c + ' 2' for c in cols]
+            for col in cols:
                 val = tbl2.loc[idx, col]
                 if not isinstance(val, str):
-                    tbl2.loc[idx, col] = '{:.3f}'.format(val)
+                    if 'ci' in col:
+                        v1, v2 = val
+                        tbl2.loc[idx, col] = '[{:.3f}, {:.3f}]'.format(v1, v2)
+                    else:
+                        tbl2.loc[idx, col] = '{:.3f}'.format(val)
 
     return tbl2
+
+
+def psd_to_df(data1, data2):
+    '''Create a dataframe out of psd_high, psd_low data.'''
+    nx, ny = data1.shape[0], data2.shape[0]
+    data = np.concatenate([data1, data2], axis=0)
+    labels = ['diagnosed'] * nx + ['controls'] * ny
+    df = pd.DataFrame(data={'FAA': data, 'group': labels})
+    return df
