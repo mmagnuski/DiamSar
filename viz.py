@@ -303,33 +303,62 @@ def create_swarm_df(psd_high, psd_low):
     return df_list
 
 
-def plot_heatmap_add1(clst):
-    '''Plot results of Standardized Analyses (ADD1) with heatmap and topo.'''
-    fig = plt.figure(figsize=(7, 9))
-    gs = fig.add_gridspec(2, 2, top=0.95, bottom=0.05, left=0.08, right=0.88,
-                          height_ratios=[0.6, 0.4], hspace=0.4, wspace=0.25)
-    f_ax1 = fig.add_subplot(gs[0, :])
-    f_ax2 = fig.add_subplot(gs[1, 0])
-    f_ax3 = fig.add_subplot(gs[1, 1])
+def plot_heatmap_add1(clst, ax_dict=None, scale=None):
+    '''Plot results of Analyses on Standardized data (ADD1) with heatmap
+    and topomap.
+
+    Parameters
+    ----------
+    clst: borsar.Clusters
+        Cluster-based permutation test result.
+
+    Returns
+    -------
+    fig: matplotlib Figure
+        Matplotlib figure object.
+    obj_dict: dict
+        Dictionary with axes of the figure. The dictionary contains:
+        'heatmap': heatmap axis
+        'colorbar': colorbar axis
+        'topo1': lower frequency topography
+        'topo2': higher frequency topography
+    '''
+    if ax_dict is None:
+        fig = plt.figure(figsize=(7, 9))
+        gs = fig.add_gridspec(2, 2, top=0.95, bottom=0.05, left=0.08,
+                              right=0.88, height_ratios=[0.6, 0.4], hspace=0.4,
+                              wspace=0.25)
+        f_ax1 = fig.add_subplot(gs[0, :])
+        f_ax2 = fig.add_subplot(gs[1, 0])
+        f_ax3 = fig.add_subplot(gs[1, 1])
+    else:
+        f_ax1, f_ax2, f_ax3 = (ax_dict['heatmap'], ax_dict['topo1'],
+                               ax_dict['topo2'])
+        fig = f_ax1.figure
+
+    if scale is None:
+        scale = dict(heatmap_xlabel=22, heatmap_ylabel=22, cbar_label=20,
+                     heatmap_xticklabels=18, cbar_yticklabels=16,
+                     topo_title=18, markersize=8)
 
     clst_idx = [0, 1] if len(clst) > 1 else None
     clst.plot(dims=['chan', 'freq'], cluster_idx=clst_idx, axis=f_ax1,
               vmin=-4, vmax=4, alpha=0.65)
-    f_ax1.set_xlabel('Frequency (Hz)', fontsize=22)
-    f_ax1.set_ylabel('frontal channels', fontsize=22)
+    f_ax1.set_xlabel('Frequency (Hz)', fontsize=scale['heatmap_xlabel'])
+    f_ax1.set_ylabel('frontal channels', fontsize=scale['heatmap_ylabel'])
 
     contrast = clst.description['contrast']
     cbar_label = ('Regression t value' if 'reg' in contrast
                   else 't value')
     cbar_ax = fig.axes[-1]
-    cbar_ax.set_ylabel(cbar_label, fontsize=20)
+    cbar_ax.set_ylabel(cbar_label, fontsize=scale['cbar_label'])
 
     # change ticklabels fontsize
     for tck in f_ax1.get_xticklabels():
-        tck.set_fontsize(18)
+        tck.set_fontsize(scale['heatmap_xticklabels'])
 
     for tck in cbar_ax.get_yticklabels():
-        tck.set_fontsize(16)
+        tck.set_fontsize(scale['cbar_yticklabels'])
 
     freqs1, freqs2 = (9, 10), (11.5, 12.50)
     freqlabel1, freqlabel2 = '9 - 10 Hz', '11.5 - 12.5 Hz'
