@@ -671,3 +671,20 @@ def _load_stat(fname):
         return clst
     else:
         return stat
+
+
+def sort_clst_channels(clst):
+    '''Sort cluster channels from left to right.'''
+    import mne
+    from borsar.channels import get_ch_pos
+
+    ch_pos = get_ch_pos(clst.info)
+    sorting = np.argsort(ch_pos[:, 0])
+
+    clst.info = mne.pick_info(clst.info, sel=sorting)
+    clst.stat = clst.stat[sorting]
+
+    if clst.clusters is not None:
+        clst.clusters = clst.clusters[:, sorting]
+    clst.dimcoords[0] = np.array(clst.dimcoords[0])[sorting].tolist()
+    return clst
