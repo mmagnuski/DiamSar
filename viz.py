@@ -364,7 +364,10 @@ def plot_heatmap_add1(clst, ax_dict=None, scale=None):
     freqlabel1, freqlabel2 = '9 - 10 Hz', '11.5 - 12.5 Hz'
     idx1, idx2 = None, None
 
-    if contrast == 'dreg' and clst.description['study'] == 'C':
+    show_p = ((contrast == 'dreg' and clst.description['study'] == 'C')
+              or (contrast == 'cvsd' and clst.description['study'] == 'C')
+              or (contrast == 'cdreg' and clst.description['study'] == 'C'))
+    if show_p:
         freqlabel1 += '\np = {:.3f}'.format(clst.pvals[1])
         freqlabel2 += '\np = {:.3f}'.format(clst.pvals[0])
         idx1, idx2 = 1, 0
@@ -792,13 +795,13 @@ def plot_aggregated(ax=None, eff='d'):
     for contrast in contrasts:
         for space in ['avg', 'csd']:
             # get relevant data
-            high, low, studies, ch_names = _pairs_aggregated_studies(
+            data1, data2, studies, ch_names = _pairs_aggregated_studies(
                 space, contrast)
 
             # channel pair loop
             for ch_idx in range(2):
                 # compute es, bootstrap esci and bf01
-                stats = stat_fun(high, low, ch_idx=ch_idx)
+                stats = stat_fun(data1, data2, ch_idx=ch_idx)
 
                 # plot distribution, ES and CI
                 v = _plot_dist_esci(ax, ypos, stats, color=distr_color)
@@ -849,3 +852,86 @@ def plot_aggregated(ax=None, eff='d'):
     ax.set_title('Aggregated channel pair results\nfor {}'.format(cntr),
                  fontsize=24, pad=25)
     return ax
+
+
+def full_fig5_supplement_plot(contrast, studies):
+    '''Plot whole panel plot for figure 5 supplements, for given contrast
+    and studies.'''
+    scale = dict(heatmap_xlabel=15, heatmap_ylabel=15, cbar_label=12,
+                 heatmap_xticklabels=14, cbar_yticklabels=10,
+                 topo_title=14, markersize=5)
+
+    spaces = ['avg', 'csd']
+    fig = plt.figure(figsize=(10, 9))
+    gs = fig.add_gridspec(4, 4, top=0.85, bottom=0.05, left=0.15,
+                          right=0.9, height_ratios=[0.6, 0.4, 0.6, 0.4],
+                          hspace=0.75, wspace=1.)
+
+    for study_idx, study in enumerate(studies):
+        for space_idx, space in enumerate(spaces):
+            # create axes
+            # -----------
+            row_idx = space_idx * 2
+            col_idx = [study_idx * 2, study_idx * 2 + 1]
+            f_ax1 = fig.add_subplot(gs[row_idx, col_idx[0]:col_idx[1] + 1])
+            f_ax2 = fig.add_subplot(gs[row_idx + 1, col_idx[0]])
+            f_ax3 = fig.add_subplot(gs[row_idx + 1, col_idx[1]])
+
+            # modify topo axes position
+            # -------------------------
+            pos1 = list(f_ax2.get_position().bounds)
+            pos2 = list(f_ax3.get_position().bounds)
+            w, h = pos1[2], pos1[3]
+            pos1[1] -= h * 0.334
+            pos1[2] *= 1.334
+            pos1[3] *= 1.334
+            f_ax2.set_position(pos1)
+
+            pos2[0] -= w * 0.334
+            pos2[1] -= h * 0.334
+            pos2[2] *= 1.334
+            pos2[3] *= 1.334
+            f_ax3.set_position(pos2)
+
+            # read cluster results
+            clst = ds.analysis.load_stat(study=study, contrast=contrast,
+                                         space=space, stat_dir='stats add1',
+                                         avg_freq=False, selection='frontal',
+                                         transform=['log', 'zscore'])
+            # sort channels left to right
+            # (does not affect results, only channel order)
+            clst = ds.analysis.sort_clst_channels(clst)
+
+            # plot heatmap + two topographies
+            ax_dict = dict(heatmap=f_ax1, topo1=f_ax2, topo2=f_ax3)
+            fig, obj_dct = ds.viz.plot_heatmap_add1(clst, ax_dict=ax_dict,
+                                                    scale=scale)
+
+            # remove requency xlabel when topo titles are two lines long
+            # (otherwise there is ugly text overlap)
+            n_lines = [len(obj_dct[key].axes.get_title().split('\n'))
+                       for key in ['topo1', 'topo2']]
+            longer_line = (np.array(n_lines) > 1).any()
+            if longer_line:
+                obj_dct['heatmap'].set_xlabel('')
+
+            # label rows, columns
+            if study_idx == 0:
+                # label row
+                pos_y = pos1[1] + 1.5 * pos1[3]
+                text = space.upper()
+                plt.text(0.075, pos_y, text, va='center', ha='center',
+                         transform=fig.transFigure, fontsize=21,
+                         rotation=90)
+
+            if row_idx == 0:
+                # label column
+                pos_x = pos1[0] + 1.15 * pos1[2]
+                text = 'STUDY {}'.format(ds.utils.translate_study[study])
+                plt.text(pos_x, 0.885, text, va='center', ha='center',
+                         transform=fig.transFigure, fontsize=21)
+
+    contrast_name = ds.utils.translate_contrast[contrast]
+    fig.suptitle('{} contrast'.format(contrast_name), fontsize=24,
+                 fontweight='bold')
+    return fig
