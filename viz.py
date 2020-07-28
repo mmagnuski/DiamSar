@@ -756,17 +756,15 @@ def _plot_dist_esci(ax, ypos, stats, color=None):
 
 
 def plot_aggregated(ax=None, eff='d'):
-    '''Plot aggregated effect sizes for channel pairs analyses.
+    '''Plot aggregated effect sizes, confidence intervals and bayes factors for
+    channel pairs analyses.
 
     ax: matplotlib axis
         Axis to plot to.
-        Should look good in the following setup:
-        ```python
-        ```
     eff: str
         Effect size to plot. ``'r'`` shows effects for linear relationship
         analyses with Pearson's r as the effect size. ``'d'`` shows effects for
-        group contrasts with Cohen's d as the effect size.
+        group contrasts with Cohen's d as the effect size. Defaults to ``'d'``.
 
     Returns
     -------
@@ -775,6 +773,7 @@ def plot_aggregated(ax=None, eff='d'):
     '''
 
     if ax is None:
+        # create axis to plot to
         fig_size = (11, 13.5) if eff == 'r' else (11, 12)
         gridspec = ({'left': 0.25, 'bottom': 0.1, 'right': 0.85} if eff == 'r'
                     else {'left': 0.18, 'bottom': 0.1, 'right': 0.8})
@@ -785,7 +784,7 @@ def plot_aggregated(ax=None, eff='d'):
     labels = list()
 
     # 'd' vs 'r' effect size (group contrasts vs linear relationships)
-    addpos = 0.09 if eff == 'd' else 0.06
+    addpos = 0.09 if eff == 'd' else 0.065
     stat_fun = (_compute_stats_group if eff == 'd'
                 else _compute_stats_regression)
     distr_color = (ds.utils.colors['hc'] if eff == 'd'
