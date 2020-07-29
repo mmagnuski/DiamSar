@@ -37,14 +37,14 @@ def set_paths(base_dir=None):
     has_C = (paths.get_path('base', as_str=False) / 'DiamSar').exists()
     if has_C:
         paths.add_path('main', 'DiamSar', relative_to='base')
-        paths.add_path('fig', 'fig')
+        paths.add_path('fig', 'fig', validate=False)
         paths.add_path('subjects_dir', 'eeg')
         paths.add_path('base_eeg', 'eeg')
         paths.add_path('eeg', 'resampled set', relative_to='base_eeg')
         paths.add_path('fwd', 'test do coreg', relative_to='base_eeg')
         paths.add_path('beh_base', 'beh', relative_to='main')
         paths.add_path('beh', 'stern', task='sternberg',
-                       relative_to='beh_base')
+                       relative_to='beh_base', validate=False)
 
         # task-specific data
         translate = dict(rest='baseline', linord='linord',
@@ -58,8 +58,7 @@ def set_paths(base_dir=None):
     # -------
     base_dir = paths.get_path('base')
     paths.register_study('B', tasks=['rest', 'linord'])
-    study_B_path = Path(base_dir, 'Wronski',
-                        'porządki liniowe dźwiekowe + rest')
+    study_B_path = Path(base_dir, 'Wronski')
     has_B = study_B_path.exists()
 
     if has_B:
