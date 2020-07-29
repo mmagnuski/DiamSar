@@ -52,32 +52,35 @@ def read_bdi(paths, study='C', **kwargs):
     if study == 'A':
         df = pd.read_excel(op.join(beh_dir, 'baza minimal.xlsx'))
         select_col = ['ID', 'BDI_k', 'DIAGNOZA']
-        rename_col = {'BDI_k': 'BDI-I'}
 
         if full_table:
             select_col += ['plec_k', 'wiek']
             rename_col.update({'plec_k': 'sex', 'wiek': 'age'})
 
+        # select relevant columns
         bdi = df[select_col]
         bdi = make_sure_diagnosis_is_boolean(bdi)
+
+        # rename columns
+        rename_col = {'BDI_k': 'BDI-I'}
         bdi = bdi.rename(columns=rename_col)
 
-        # ! TODO make sure that sex is coded this way
         if full_table:
+            # ! TODO make sure that sex is coded this way
             relabel = {1: 'female', 2: 'male'}
             bdi.loc[:, 'sex'] = bdi.sex.replace(relabel)
 
     if study == 'B':
-        # FIXME: B has weird folder structure
         beh_dir = op.join(base_dir, 'beh')
         if full_table:
             bdi = pd.read_excel(op.join(beh_dir, 'BAZA DANYCH.xlsx'))
             sel_col = ['BDI 2-pomiar wynik', 'wykształcenie', 'wiek', 'płeć']
-            # has also 'problemy ze snem', 'miasto'
+            sel_col = [col for col in sel_col if col in bdi.columns]
             bdi = bdi[sel_col]
 
             # rename columns
             rename_col = {'wiek': 'age', 'płeć': 'sex',
+                          'BDI 2-pomiar wynik': 'BDI-I',
                           'wykształcenie': 'education'}
             bdi = bdi.rename(columns=rename_col)
             # ! check ID with 'BDI.xlsx' !
@@ -88,7 +91,7 @@ def read_bdi(paths, study='C', **kwargs):
     if study == 'C':
         df = pd.read_excel(op.join(beh_dir, 'BAZA_DANYCH.xlsx'))
         if full_table:
-            bdi = study_C_reformat_beh_table(df)
+            bdi = study_C_reformat_original_beh_table(df)
         else:
             bdi = df[['ID', 'BDI-II', 'DIAGNOZA']]
 
@@ -103,8 +106,11 @@ def study_C_reformat_original_beh_table(df):
     This function is not used in "Three times NO" paper.
     '''
     # select relevant columns
-    df = df[['ID', 'DATA BADANIA', 'WIEK', 'PŁEĆ', 'WYKSZTAŁCENIE',
-             'DIAGNOZA', 'BDI-II']]
+    sel_col = ['ID', 'DATA BADANIA', 'WIEK', 'PŁEĆ', 'WYKSZTAŁCENIE',
+               'DIAGNOZA', 'BDI-II']
+    sel_col = [col for col in sel_col if col in df.columns]
+    df = df[sel_col]
+
     # fix dates
     df.loc[0, 'DATA BADANIA'] = df.loc[1, 'DATA BADANIA']
     df.loc[7, 'WIEK'] = datetime.datetime(df.loc[7, 'WIEK'], 6, 25)
