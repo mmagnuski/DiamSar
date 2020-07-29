@@ -38,10 +38,10 @@ def set_paths(base_dir=None):
     if has_C:
         paths.add_path('main', 'DiamSar', relative_to='base')
         paths.add_path('fig', 'fig', validate=False)
-        paths.add_path('subjects_dir', 'eeg')
         paths.add_path('base_eeg', 'eeg')
         paths.add_path('eeg', 'resampled set', relative_to='base_eeg')
-        paths.add_path('fwd', 'test do coreg', relative_to='base_eeg')
+        paths.add_path('subjects_dir', 'src', relative_to='base_eeg')
+        paths.add_path('fwd', 'src', relative_to='base_eeg')
         paths.add_path('beh_base', 'beh', relative_to='main')
         paths.add_path('beh', 'stern', task='sternberg',
                        relative_to='beh_base', validate=False)
@@ -122,10 +122,8 @@ def set_paths(base_dir=None):
             paths.register_data('info', load_info, study=study, cache=True)
             paths.register_data('bdi', read_bdi, study=study, cache=True)
             paths.register_data('psd', load_psd, study=study, cache=False)
+            paths.register_data('fwd', load_forward, study=study)
 
-    paths.register_data('fwd', load_forward, study='C')
-    paths.register_data('fwd', load_forward, study='B')
-    paths.register_data('fwd', load_forward, study='A')
     paths.register_data('src_sym', load_src_sym, study='C')
 
     return paths
