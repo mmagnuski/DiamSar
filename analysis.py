@@ -140,8 +140,8 @@ def run_analysis(study='C', contrast='cvsd', eyes='closed', space='avg',
         psds = psds[no_nans]
         subj_id = subj_id[no_nans]
 
-    info, src, subject, subjects_dir = get_space_info(study, space, ch_names,
-                                                      selection)
+    info, src, subject, subjects_dir = _get_space_info(study, space, ch_names,
+                                                       selection)
 
     # prepare data
     # ------------
@@ -154,7 +154,7 @@ def run_analysis(study='C', contrast='cvsd', eyes='closed', space='avg',
 
     # construct adjacency matrix for clustering
     if 'pairs' not in selection:
-        adjacency = get_adjacency(study, space, ch_names, selection, src)
+        adjacency = _get_adjacency(study, space, ch_names, selection, src)
 
     # put spatial dimension last for cluster-based test
     if not avg_freq or psd.ndim == 3:
@@ -200,8 +200,8 @@ def run_analysis(study='C', contrast='cvsd', eyes='closed', space='avg',
                 alpha_threshold=cluster_p_threshold)
 
         # construct Clusters with stat_info in description
-        return construct_clusters(clusters, pval, stat, space, stat_info, info,
-                                  src, subjects_dir, subject, ch_names, freq)
+        return _construct_clusters(clusters, pval, stat, space, stat_info, info,
+                                   src, subjects_dir, subject, ch_names, freq)
     else:
         # for selected pairs (two channel pairs) we don't correct for
         # multiple comparisons:
@@ -617,7 +617,7 @@ def analyses_to_df(analyses):
     return df
 
 
-def get_adjacency(study, space, ch_names, selection, src):
+def _get_adjacency(study, space, ch_names, selection, src):
     '''Return adjacency for given study and space.'''
     if not space == 'src':
         # use right-side channels in adjacency if we calculate asymmetry
@@ -641,7 +641,7 @@ def get_adjacency(study, space, ch_names, selection, src):
     return adjacency
 
 
-def construct_clusters(clusters, pval, stat, space, stat_info, info,
+def _construct_clusters(clusters, pval, stat, space, stat_info, info,
                        src, subjects_dir, subject, ch_names, freq):
     '''Construct Clusters object out of cluster-based test results.'''
     from borsar.cluster import Clusters
@@ -674,7 +674,7 @@ def construct_clusters(clusters, pval, stat, space, stat_info, info,
     return clst
 
 
-def get_space_info(study, space, ch_names, selection):
+def _get_space_info(study, space, ch_names, selection):
     '''Return relevant source/channel space along with additional variables.'''
     if not space == 'src':
         info = pth.paths.get_data('info', study=study)
