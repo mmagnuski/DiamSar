@@ -42,8 +42,8 @@ def plot_grid_cluster(stats_clst, contrast, vlim=3):
     stats_clst : pandas.DataFrame
         DataFrame with information about all cluster-based analyses.
     contrast : str
-        Statistical contrast represented as string. For example ``'cvsd'``
-        means controls vs diagnosed.
+        Statistical contrast represented as string. See
+        ``DiamSar.analysis.run_analysis`` for contrast description.
     vlim : float
         Value limits for the topomap colormap (in values of the t statistic).
 
@@ -309,19 +309,19 @@ def plot_heatmap_add1(clst, ax_dict=None, scale=None):
 
     Parameters
     ----------
-    clst: borsar.Clusters
+    clst : borsar.Clusters
         Cluster-based permutation test result.
 
     Returns
     -------
-    fig: matplotlib Figure
+    fig : matplotlib Figure
         Matplotlib figure object.
-    obj_dict: dict
+    obj_dict : dict
         Dictionary with axes of the figure. The dictionary contains:
-        'heatmap': heatmap axis
-        'colorbar': colorbar axis
-        'topo1': lower frequency topography
-        'topo2': higher frequency topography
+        * 'heatmap': heatmap axis
+        * 'colorbar': colorbar axis
+        * 'topo1': lower frequency topography
+        * 'topo2': higher frequency topography
     '''
     if ax_dict is None:
         fig = plt.figure(figsize=(7, 9))
@@ -388,6 +388,7 @@ def plot_heatmap_add1(clst, ax_dict=None, scale=None):
     return fig, obj_dict
 
 
+# TODO: compare with the one in script to see which one is used in the paper
 def bdi_histogram(bdi):
     '''Plot BDI histogram from ``bdi`` dataframe of given study.'''
     msk = bdi.DIAGNOZA
@@ -759,9 +760,9 @@ def plot_aggregated(ax=None, eff='d'):
     '''Plot aggregated effect sizes, confidence intervals and bayes factors for
     channel pairs analyses.
 
-    ax: matplotlib axis
+    ax : matplotlib axis
         Axis to plot to.
-    eff: str
+    eff : str
         Effect size to plot. ``'r'`` shows effects for linear relationship
         analyses with Pearson's r as the effect size. ``'d'`` shows effects for
         group contrasts with Cohen's d as the effect size. Defaults to ``'d'``.
@@ -855,7 +856,17 @@ def plot_aggregated(ax=None, eff='d'):
 
 def full_fig5_supplement_plot(contrast, studies):
     '''Plot whole panel plot for figure 5 supplements, for given contrast
-    and studies.'''
+    and studies.
+
+    Parameters
+    ----------
+    contrast : str
+        Statistical contrast to use. See ``DiamSar.analysis.run_analysis``
+        for contrast desctription.
+    studies : list of studies
+        Studies to use. See ``DiamSar.analysis.run_analysis`` for study
+        description.
+        '''
     scale = dict(heatmap_xlabel=15, heatmap_ylabel=15, cbar_label=12,
                  heatmap_xticklabels=14, cbar_yticklabels=10,
                  topo_title=14, markersize=5)

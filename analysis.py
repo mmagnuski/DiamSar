@@ -12,7 +12,7 @@ from . import utils
 from .freq import format_psds, get_psds
 
 
-def run_analysis(study='C', contrast='cvsc', eyes='closed', space='avg',
+def run_analysis(study='C', contrast='cvsd', eyes='closed', space='avg',
                  freq_range=(8, 13), avg_freq=True, selection='frontal_asy',
                  div_by_sum=False, transform='log', n_permutations=10000,
                  cluster_p_threshold=0.05, verbose=True):
@@ -20,48 +20,107 @@ def run_analysis(study='C', contrast='cvsc', eyes='closed', space='avg',
 
     Parameters
     ----------
-    study : str, optional
-        Study name or ID to use in the analysis. Study ``'C'`` is used by
-        default.
+    study : str
+        Which study to use. Studies are coded with letters in the following
+        fashion:
+
+        =====   ============   ============
+        study   study letter   study name
+        =====   ============   ============
+        I       A              Nowowiejska
+        II      B              Wronski
+        III     C              DiamSar
+        =====   ============   ============
+
+        Study ``'C'`` is used by default.
+    contrast : str
+        Statistical contrast to use. Contrasts are coded in the following
+        fashion:
+
+        ===========   =============   ===============================
+        contrast      contrast name   contrast description
+        ===========   =============   ===============================
+        ``'cvsd'``    DvsHC           diagnosed vs healthy controls
+        ``'cvsc'``    SvsHC           subclinical vs healthy controls
+        ``'dreg'``    DReg            linear relationship with BDI restricted
+        ``'dreg'``    DReg            linear relationship with BDI restricted
+                                      to depressed individuals.
+        ``'creg'``    nonDReg         linear relationship with BDI restricted
+                                      to non-depressed individuals.
+        ``'cdreg'``   allReg          linear relationship with BDI on all
+                                      participants.
+        ===========   =============   ===============================
+
+        Contrast ``'cvsd'`` is used by default. For more details on the BDI
+        thresholds used to create healthy controls and subclinical groups
+        see ``DiamSar.utils.group_bdi``.
+    eyes : str
+        Rest segment to use in the analysis:
+        * ``'closed'`` - eyes closed
+        * ``'open'`` - eyes open
+
+        Only study C has eyes open rest segments.
     space : str
         Space to use in the analysis:
 
-        * ``'avg'`` - channel space, average reference
-        * ``'csd'`` - channel space, Current Source Density reference
-        * ``'src'`` - source space
+        ===========   =====================================================
+        space         description
+        ===========   =====================================================
+        ``'avg'``     channel space, average reference
+        ``'csd'``     channel space, Current Source Density (CSD) reference
+        ``'src'``     source space
+        ===========   =====================================================
+
     freq_range : tuple
         Lower and higher edge of the frequency space to include in the
-        analysis.
+        analysis (in Hz). ``(8, 13)`` by default.
     avg_freq : bool
-        whether to average the selected frequency range.
+        whether to average the selected frequency range. ``True`` by default.
     selection : str
         Channels/sources to select.
+
+        =================   ==========================================
+        value               description
+        =================   ==========================================
+        ``'all'``           all channels
+        ``'frontal'``       all frontal channels
+        ``'frontal_asy'``   all frontal asymmetry channel pairs
+        ``'asy'``           all asymmetry channel pairs
+        ``'asy_pairs'``     two selected asymmetry channel pairs
+                            corresponding to F4-F3 and F8-F7
+        =================   ==========================================
+
+        Defaults to ``'frontal_asy'``.
+
     div_by_sum : bool
         Whether to divide R - L asymmetry by the sum (R + L).
-    eyes : str
-        Rest segment to use in analysis:
-
-        * ``'closed'`` - eyes closed
-        * ``'open'`` - eyes open
     transform : str | list of str
         Transformation on the data:
 
-        * ``'log'`` - log-transform
-        * ``'zscore'`` - within-participant z-score
-    contrast : str
-        Statistical contrast to use. See ``DiamSar.utils.group_bdi``
+        ============   ==========================================
+        value          description
+        ============   ==========================================
+        ``'log'``      log-transform
+        ``'zscore'``   within-participant across-channels z-score
+        ============   ==========================================
+
+        You can also group transforms: ``['log', 'zscore']`` zscores the
+        log-transformed data. ``'log'`` is used by default.
     n_permutations : int, optional
         Number of permutations to conduct in the cluster-based permutation
         test. ``10000`` by default.
     cluster_p_threshold : float, optional
         Cluster entry p value threshold. ``0.05`` by default.
     verbose : bool | int
-        Verbosity level supported by mne-python.
+        Verbosity level supported by mne-python. ``True`` by default.
 
     Returns
     -------
     clst : borsar.cluster.Clusters | dict
-        Result of the cluster-based permutation test
+        Result of the analysis. Cluster-based permutation test result object
+        in all cases except ``'asy_pairs'`` contrast. ``'asy_pairs'`` does not
+        correct for multiple comparisons and a dictionary of results is
+        returned for this contrast.
     '''
     # get base study name and setup stat_info dict
     stat_info = dict(avg_freq=avg_freq, freq_range=freq_range,
@@ -172,6 +231,9 @@ def summarize_stats(split=True, reduce_columns=True, stat_dir='stats'):
     reduce_columns : bool
         Whether to remove columns with no variability from the output. Defaults
         to ``True``.
+    stat_dir : str
+        Subdirectory to use (``'stats'``, ``'add1'`` or ``'add2'``, unless
+        additional subdirectories were created).
 
     Returns
     -------
@@ -335,7 +397,27 @@ def summarize_ch_pair_stats(reduce_columns=True, stat_dir='stats',
 
 def esci_indep_cohens_d(data1, data2, n_boot=5000):
     '''Compute Cohen's d effect size and its bootstrap 95% confidence interval.
-    (using bias corrected accelerated bootstrap)'''
+    (using bias corrected accelerated bootstrap).
+
+    Parameters
+    ----------
+    data1 : np.ndarray
+        One dimensional array of values for the "high" group (for example
+        diagnosed participants).
+    data2 : np.ndarray
+        One dimensional array of values for the "low" group (for example
+        healthy controls).
+    n_boot : int
+        Number of bootstraps to use.
+
+    Returns
+    -------
+    stats : dict
+        Dictionary of results.
+        * ``stats['es']`` contains effect size.
+        * ``stats['ci']`` contains 95% confidence interval for the effect size.
+        * ``stats['bootstraps']`` contains bootstrap effect size values.
+    '''
     import dabest
     df = utils.psd_to_df(data1, data2)
     dbst_set = dabest.load(df, idx=("controls", "diagnosed"),
@@ -350,7 +432,25 @@ def esci_indep_cohens_d(data1, data2, n_boot=5000):
 
 def esci_regression_r(x, y, n_boot=5000):
     '''Compute Pearson's r effect size and its bootstrap 95% confidence
-    interval (using bias corrected accelerated bootstrap).'''
+    interval (using bias corrected accelerated bootstrap).
+
+    Parameters
+    ----------
+    x : np.ndarray
+        One dimensional array of values for the correlation.
+    y : np.ndarray
+        One dimensional array of values for the correlation.
+    n_boot : int
+        Number of bootstraps to use.
+
+    Returns
+    -------
+    stats : dict
+        Dictionary of results.
+        * ``stats['es']`` contains effect size.
+        * ``stats['ci']`` contains 95% confidence interval for the effect size.
+        * ``stats['bootstraps']`` contains bootstrap effect size values.
+    '''
     # use pearson correlation
     from scipy.stats import pearsonr
     import scikits.bootstrap as boot
@@ -404,10 +504,17 @@ def list_analyses(study=list('ABC'), contrast=['cvsc', 'cvsd', 'creg', 'cdreg',
                   transform=['log'], verbose=True):
     '''
     List all possible analyses for given set of parameter options.
-    For explanation of the arguments see ``run_analysis``. The only difference
-    is that ``list_analyses`` takes list of values for each of the arguments -
-    where each element of the list is one analysis option that should be
-    combined with all the other options.
+    For explanation of the arguments see ``DiamSar.analysis.run_analysis``.
+    The only difference is that ``list_analyses`` takes list of values for
+    each of the arguments - where each element of the list is one analysis
+    option that should be combined with all the other options.
+
+    Returns
+    -------
+    good_analyses : list of tuples
+        List of tuple where each tuple contains all relevant analysis
+        parameters. To get a more user-friendly representation use
+        ``DiamSar.analysis.analyses_to_df`` function on the returned tuple.
     '''
 
     from itertools import product
@@ -467,9 +574,16 @@ def run_many(study=list('ABC'), contrast=['cvsc', 'cvsd', 'creg', 'cdreg',
     '''
     Run multiple analyses parametrized by combinations of options given in
     arguments.
-    For explanation of the arguments see ``run_analysis``. The only difference
-    is that ``run_many`` takes list of values for each of the arguments.
-    Every analysis result (statistical test result) is saved to disk.
+    For explanation of the arguments see ``DiamSar.analysis.run_analysis``.
+    The only difference is that ``run_many`` takes list of values for each
+    of the arguments.
+    Every analysis result (statistical test result) is saved to disk to
+    results subdirectory defined by ``save_dir``.
+    Instead of using keyword arguments to define analysis options you can
+    pass the analyses via the ``analyses`` keyword argument. The analyses
+    have to be in the format used by ``DiamSar.analysis.list_analyses``:
+    list of (study, contrast, eyes, space, freq_range, avg_freq, selection,
+    transform) tuples.
     '''
     from borsar.utils import silent_mne
     from DiamSar.utils import progressbar as pbarobj

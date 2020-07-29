@@ -18,7 +18,34 @@ import mne
 
 # FIXME - use in register mode (CHECK - did I mean .get_data(), is it already done?)
 def read_bdi(paths, study='C', **kwargs):
-    '''Read BDI scores.'''
+    '''Read BDI scores and diagnosis status.
+
+    Parameters
+    ----------
+    paths : borsar.project.Paths
+        DiamSar paths objects containing information about all the relevant
+        paths.
+    study : str
+        Which study to use. Studies are coded with letters in the following
+        fashion:
+
+        =====   ============   ============
+        study   study letter   study name
+        =====   ============   ============
+        I       A              Nowowiejska
+        II      B              Wronski
+        III     C              DiamSar
+        =====   ============   ============
+
+    full_table : bool
+        Whether to read full table, containing for example age and sex.
+        This option is not used in "Three times NO" paper.
+
+    Returns
+    -------
+    bdi : pandas.DataFrame
+        Dataframe with bdi scores and diagnosis status.
+    '''
     full_table = kwargs.get('full_table', False)
     base_dir = paths.get_path('main', study=study)
     beh_dir = op.join(base_dir, 'beh')
@@ -70,8 +97,11 @@ def read_bdi(paths, study='C', **kwargs):
     return bdi.set_index('ID')
 
 
-def study_C_reformat_beh_table(df):
-    '''Select and recode relevant columns from behavioral table.'''
+def study_C_reformat_original_beh_table(df):
+    '''Select and recode relevant columns from behavioral table.
+
+    This function is not used in "Three times NO" paper.
+    '''
     # select relevant columns
     df = df[['ID', 'DATA BADANIA', 'WIEK', 'PŁEĆ', 'WYKSZTAŁCENIE',
              'DIAGNOZA', 'BDI-II']]
@@ -119,8 +149,6 @@ def load_chanord(paths, study=None, **kwargs):
     return txt.split('\t')
 
 
-# FIXME - save proper info via borsar.write_info for all studies and simplify
-#         this function
 def load_info(paths, study=None, **kwargs):
     chanpos_dir = paths.get_path('chanpos', study=study)
     raw = mne.io.read_raw_fif(op.join(chanpos_dir, 'has_info_raw.fif'))
@@ -226,7 +254,10 @@ def load_psd(path, study='C', eyes='closed', space='avg',
 
 
 def read_linord(paths):
-    '''Read linear order behavioral aggregated files.'''
+    '''Read linear order behavioral aggregated files.
+
+    This function is not used in "Three times NO" paper.
+    '''
     root_dir = paths.get_path('main', study='C')
     beh_dir = op.join(root_dir, 'bazy')
     df = pd.read_excel(op.join(beh_dir, 'transitive.xls'))
