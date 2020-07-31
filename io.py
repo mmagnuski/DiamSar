@@ -184,13 +184,13 @@ def load_GH(paths, study=None, **kwargs):
 
 
 def load_forward(paths, study=None, **kwargs):
-    fwd_dir = paths.get_path('fwd', study=study)
+    fwd_dir = paths.get_path('src', study=study)
     fname = op.join(fwd_dir, 'DiamSar-fsaverage-oct-6-fwd.fif')
     return mne.read_forward_solution(fname, verbose=False)
 
 
 def load_src_sym(paths, **kwargs):
-    src_dir = paths.get_path('fwd')
+    src_dir = paths.get_path('src')
     full_path = op.join(src_dir, 'DiamSar-fsaverage_sym-oct-6-src.fif')
     src_sym = mne.read_source_spaces(full_path, verbose=False)
     return src_sym

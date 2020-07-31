@@ -38,10 +38,9 @@ def set_paths(base_dir=None):
     if has_C:
         paths.add_path('main', 'DiamSar', relative_to='base')
         paths.add_path('fig', 'fig', validate=False)
-        paths.add_path('base_eeg', 'eeg')
-        paths.add_path('eeg', 'resampled set', relative_to='base_eeg')
-        paths.add_path('subjects_dir', 'src', relative_to='base_eeg')
-        paths.add_path('fwd', 'src', relative_to='base_eeg')
+        paths.add_path('eeg', 'eeg')
+        paths.add_path('subjects_dir', 'src', relative_to='eeg')
+        paths.add_path('src', 'src', relative_to='eeg')
         paths.add_path('beh_base', 'beh', relative_to='main')
         paths.add_path('beh', 'stern', task='sternberg',
                        relative_to='beh_base', validate=False)
@@ -50,9 +49,9 @@ def set_paths(base_dir=None):
         translate = dict(rest='baseline', linord='linord',
                          sternberg='sternberg')
         for task in ['rest', 'sternberg']:
-            paths.add_path('eeg', translate[task] + '_clean_exported',
-                           study='C', task=task, relative_to='eeg',
-                           validate=False)
+            task_eeg_dir = op.join('resampled set', translate[task] + '_clean_exported')
+            paths.add_path('eeg', task_eeg_dir, study='C', task=task,
+                           relative_to='eeg', validate=False)
 
     # study B
     # -------
@@ -64,6 +63,7 @@ def set_paths(base_dir=None):
     if has_B:
         paths.add_path('main', study_B_path, study='B')
         paths.add_path('eeg', 'eeg', study='B')
+        paths.add_path('src', 'src', study='B', relative_to='eeg')
 
         # task-specific
         for task in ['rest']:
@@ -80,17 +80,15 @@ def set_paths(base_dir=None):
     if has_A:
         paths.add_path('main', study_A_path, study='A')
         paths.add_path('eeg', 'eeg', study='A')
+        paths.add_path('src', 'src', study='A', relative_to='eeg')
 
         paths.add_path('eeg', translate['rest'] + '_clean_exported', study='A',
                        task='rest', relative_to='eeg', validate=False)
 
-    for study, has_study in zip(['A', 'B'], [has_A, has_B]):
+    for study, has_study in zip(['A', 'B', 'C'], [has_A, has_B, has_C]):
         if has_study:
             paths.add_path('chanpos', 'chanpos', study=study,
                            relative_to='eeg', validate=False)
-
-    # study C has slightly different dir structure
-    paths.add_path('chanpos', 'chanpos', study='C', relative_to='base_eeg')
 
     # getting files
     # -------------
