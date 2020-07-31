@@ -156,8 +156,10 @@ def load_chanord(paths, study=None, **kwargs):
 
 
 def load_info(paths, study=None, **kwargs):
+    from borsar.utils import silent_mne
     chanpos_dir = paths.get_path('chanpos', study=study)
-    raw = mne.io.read_raw_fif(op.join(chanpos_dir, 'has_info_raw.fif'))
+    with silent_mne(full_silence=True):
+        raw = mne.io.read_raw_fif(op.join(chanpos_dir, 'has_info_raw.fif'))
     return raw.info
 
 
