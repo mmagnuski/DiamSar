@@ -47,7 +47,7 @@ Now the easiest analysis you can perform is with the deault settings (to learn m
 # run the default analysis
 clst = ds.analysis.run_analysis()
 
-# plt the topography of the statistics (t test in this case)
+# plot the topography of the statistics (t test in this case)
 topo = clst.plot(vmin=-2, vmax=2)
 # add colorbar
 plt.colorbar(topo.img)
