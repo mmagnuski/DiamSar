@@ -1,5 +1,5 @@
 # DiamSar
-code accompanying "Three times no: no relationship between frontal alpha asymmetry and depressive disorders in a multiverse analysis of three studies" paper (you can find the preprint at bioRxiv: https://www.biorxiv.org/content/10.1101/2020.06.30.180760v1).
+code accompanying "Three times no: no relationship between frontal alpha asymmetry and depressive disorders in a multiverse analysis of three studies" paper (you can find the preprint on bioRxiv: https://www.biorxiv.org/content/10.1101/2020.06.30.180760v1).
 
 ## Required packages
 You need a standard sientific python istallation (Anaconda is recommended) with `numpy`, `scipy`, `pandas`, `matplotlib` etc. Additional non-standard libraries are:
