@@ -165,6 +165,8 @@ def read_beh(fname, study='C', task='sternberg'):
     -------
     beh : pandas.DataFrame
         Behavioral data for given subject, in given task from given study.
+
+    This function is not used in "Three times NO" paper.
     '''
     if task == 'sternberg':
         beh_dir = pth.paths.get_path('beh', task='sternberg')
@@ -181,10 +183,16 @@ def read_beh(fname, study='C', task='sternberg'):
 
 # coreg stuff
 # -----------
+# - [ ] CONSIDER removing as obsolete
 def create_dig_montage(inst, montage=None, dig_ch_pos=True, hsp=True,
                        scale=1 / 1000., coords=None):
     '''
     Create DigMontage from Montage or digitization dataframe.
+
+    This function was used to create custom digitization in earlier mne
+    versions. However, since then, this has become much easier in recent mne
+    versions, so this function has become obsolete. Also - it is likely not to
+    work on recent mne versions.
 
     Parameters
     ----------

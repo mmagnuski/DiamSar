@@ -1,4 +1,6 @@
 import numpy as np
+import pandas as pd
+from sarna.utils import progressbar
 
 
 # define DiamSar colors
@@ -16,27 +18,9 @@ colors['mid'] = hc_sub_mid
 colors['gray'] = graycol
 del hc_sub_mid, graycol, col
 
-
-# - [ ] move to borsar, try using autonotebook if not str
-# - [ ] later allow for tqdm progressbar as first arg
-def progressbar(progressbar, total=None):
-    if progressbar and not progressbar == 'text':
-        from tqdm import tqdm_notebook
-        pbar = tqdm_notebook(total=total)
-    elif progressbar == 'text':
-        from tqdm import tqdm
-        pbar = tqdm(total=total)
-    else:
-        pbar = EmptyProgressbar(total=total)
-    return pbar
-
-
-class EmptyProgressbar(object):
-    def __init__(self, total=None):
-        self.total = total
-
-    def update(self, val):
-        pass
+translate_study = dict(A='I', B='II', C='III')
+translate_contrast = {'cvsc': 'SvsHC', 'cvsd': 'DvsHC', 'dreg': 'DReg',
+                      'cdreg': 'allReg', 'creg': 'nonDReg'}
 
 
 # FIXME - add more tests
@@ -84,6 +68,9 @@ def group_bdi(subj_id, bdi, method='cvsc', lower_threshold=None,
     sid = subj_id[has_subj]
     bdi = bdi.loc[sid, :]
     bdi_col = 'BDI-II' if 'BDI-II' in bdi.columns else 'BDI-I'
+
+    if method not in ['cvsd', 'cvsc', 'dreg', 'creg', 'cdreg']:
+        raise ValueError('Unexpected method: {}'.format(method))
 
     if method == 'cvsc':
         bdi_sel = bdi.loc[~bdi.DIAGNOZA, bdi_col].values
@@ -143,7 +130,6 @@ def reformat_stat_table(tbl):
             columns.remove(col)
 
     col_ord = firstcols + columns[2:]
-
     tbl2 = tbl.loc[:, col_ord]
 
     # N
@@ -171,17 +157,13 @@ def reformat_stat_table(tbl):
 
     # translate contrasts, other enh
     # ------------------------------
-    study_trsl = {'A': 'I', 'B': 'II', 'C': 'III'}
-    con_trsl = {'cvsc': 'SvsHC', 'cvsd': 'DvsHC', 'dreg': 'DReg',
-                'cdreg': 'allReg', 'creg': 'nonDReg'}
-
     for idx in tbl2.index:
         # translate contrast
-        new_con = con_trsl[tbl2.loc[idx, 'contrast']]
+        new_con = translate_contrast[tbl2.loc[idx, 'contrast']]
         tbl2.loc[idx, 'contrast'] = new_con
 
         # rename study A -> I etc.
-        tbl2.loc[idx, 'study'] = study_trsl[tbl2.loc[idx, 'study']]
+        tbl2.loc[idx, 'study'] = translate_study[tbl2.loc[idx, 'study']]
 
         # nan -> NA
         if has_clusters:
@@ -195,10 +177,25 @@ def reformat_stat_table(tbl):
                 if not isinstance(val, str):
                     tbl2.loc[idx, col] = '{:.3f}'.format(val)
         else:
-            # for pairs
-            for col in ['t 1', 'p 1', 't 2', 'p 2']:
+            # for channel pairs
+            cols = ['t', 'p', 'es', 'ci']
+            cols = [c + ' 1' for c in cols] + [c + ' 2' for c in cols]
+            for col in cols:
                 val = tbl2.loc[idx, col]
                 if not isinstance(val, str):
-                    tbl2.loc[idx, col] = '{:.3f}'.format(val)
+                    if 'ci' in col:
+                        v1, v2 = val
+                        tbl2.loc[idx, col] = '[{:.3f}, {:.3f}]'.format(v1, v2)
+                    else:
+                        tbl2.loc[idx, col] = '{:.3f}'.format(val)
 
     return tbl2
+
+
+def psd_to_df(data1, data2):
+    '''Create a dataframe out of psd_high, psd_low data.'''
+    nx, ny = data1.shape[0], data2.shape[0]
+    data = np.concatenate([data1, data2], axis=0)
+    labels = ['diagnosed'] * nx + ['controls'] * ny
+    df = pd.DataFrame(data={'FAA': data, 'group': labels})
+    return df

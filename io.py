@@ -12,39 +12,77 @@ import mne
 
 # load functions
 # --------------
-# - [ ] add load montage?
+# most of the functions here are accessed via:
+# paths.get_data(data_type, study=study)
+# where ``paths`` is ``DiamSar.pth.paths``
 
-# FIXME - use in register mode
+# FIXME - use in register mode (CHECK - did I mean .get_data(), is it already done?)
 def read_bdi(paths, study='C', **kwargs):
-    '''Read BDI scores.'''
+    '''Read BDI scores and diagnosis status.
+
+    Parameters
+    ----------
+    paths : borsar.project.Paths
+        DiamSar paths objects containing information about all the relevant
+        paths.
+    study : str
+        Which study to use. Studies are coded with letters in the following
+        fashion:
+
+        =====   ============   ============
+        study   study letter   study name
+        =====   ============   ============
+        I       A              Nowowiejska
+        II      B              Wronski
+        III     C              DiamSar
+        =====   ============   ============
+
+    full_table : bool
+        Whether to read full table, containing for example age and sex.
+        This option is not used in "Three times NO" paper.
+
+    Returns
+    -------
+    bdi : pandas.DataFrame
+        Dataframe with bdi scores and diagnosis status.
+    '''
     full_table = kwargs.get('full_table', False)
     base_dir = paths.get_path('main', study=study)
     beh_dir = op.join(base_dir, 'beh')
     if study == 'A':
         df = pd.read_excel(op.join(beh_dir, 'baza minimal.xlsx'))
         select_col = ['ID', 'BDI_k', 'DIAGNOZA']
-        rename_col = {'BDI_k': 'BDI-I'}
 
         if full_table:
             select_col += ['plec_k', 'wiek']
-            rename_col['plec_k'] = 'PŁEĆ'
+            rename_col.update({'plec_k': 'sex', 'wiek': 'age'})
 
+        # select relevant columns
         bdi = df[select_col]
         bdi = make_sure_diagnosis_is_boolean(bdi)
+
+        # rename columns
+        rename_col = {'BDI_k': 'BDI-I'}
         bdi = bdi.rename(columns=rename_col)
 
         if full_table:
-            relabel = {1: 'KOBIETA', 2: 'MĘŻCZYZNA'}
-            bdi.loc[:, 'PŁEĆ'] = df.PŁEĆ.replace(relabel)
+            # ! TODO make sure that sex is coded this way
+            relabel = {1: 'female', 2: 'male'}
+            bdi.loc[:, 'sex'] = bdi.sex.replace(relabel)
 
     if study == 'B':
-        # FIXME: B has weird folder structure
         beh_dir = op.join(base_dir, 'beh')
         if full_table:
             bdi = pd.read_excel(op.join(beh_dir, 'BAZA DANYCH.xlsx'))
             sel_col = ['BDI 2-pomiar wynik', 'wykształcenie', 'wiek', 'płeć']
-            # has also 'problemy ze snem', 'miasto'
+            sel_col = [col for col in sel_col if col in bdi.columns]
             bdi = bdi[sel_col]
+
+            # rename columns
+            rename_col = {'wiek': 'age', 'płeć': 'sex',
+                          'BDI 2-pomiar wynik': 'BDI-I',
+                          'wykształcenie': 'education'}
+            bdi = bdi.rename(columns=rename_col)
             # ! check ID with 'BDI.xlsx' !
         else:
             bdi = pd.read_excel(op.join(beh_dir, 'BDI.xlsx'), header=None,
@@ -53,7 +91,7 @@ def read_bdi(paths, study='C', **kwargs):
     if study == 'C':
         df = pd.read_excel(op.join(beh_dir, 'BAZA_DANYCH.xlsx'))
         if full_table:
-            bdi = study_C_reformat_beh_table(df)
+            bdi = study_C_reformat_original_beh_table(df)
         else:
             bdi = df[['ID', 'BDI-II', 'DIAGNOZA']]
 
@@ -62,11 +100,17 @@ def read_bdi(paths, study='C', **kwargs):
     return bdi.set_index('ID')
 
 
-def study_C_reformat_beh_table(df):
-    '''Select and recode relevant columns from behavioral table.'''
+def study_C_reformat_original_beh_table(df):
+    '''Select and recode relevant columns from behavioral table.
+
+    This function is not used in "Three times NO" paper.
+    '''
     # select relevant columns
-    df = df[['ID', 'DATA BADANIA', 'WIEK', 'PŁEĆ', 'WYKSZTAŁCENIE',
-             'DIAGNOZA', 'BDI-II']]
+    sel_col = ['ID', 'DATA BADANIA', 'WIEK', 'PŁEĆ', 'WYKSZTAŁCENIE',
+               'DIAGNOZA', 'BDI-II']
+    sel_col = [col for col in sel_col if col in df.columns]
+    df = df[sel_col]
+
     # fix dates
     df.loc[0, 'DATA BADANIA'] = df.loc[1, 'DATA BADANIA']
     df.loc[7, 'WIEK'] = datetime.datetime(df.loc[7, 'WIEK'], 6, 25)
@@ -111,11 +155,11 @@ def load_chanord(paths, study=None, **kwargs):
     return txt.split('\t')
 
 
-# FIXME - save proper info via borsar.write_info for all studies and simplify
-#         this function
 def load_info(paths, study=None, **kwargs):
+    from borsar.utils import silent_mne
     chanpos_dir = paths.get_path('chanpos', study=study)
-    raw = mne.io.read_raw_fif(op.join(chanpos_dir, 'has_info_raw.fif'))
+    with silent_mne(full_silence=True):
+        raw = mne.io.read_raw_fif(op.join(chanpos_dir, 'has_info_raw.fif'))
     return raw.info
 
 
@@ -140,20 +184,13 @@ def load_GH(paths, study=None, **kwargs):
 
 
 def load_forward(paths, study=None, **kwargs):
-    import mne
-    if study == 'C':
-        fwd_dir = paths.get_path('fwd')
-        return mne.read_forward_solution(
-            op.join(fwd_dir, 'DiamSar-eeg-oct-6-fwd.fif'), verbose=False)
-    elif study in ['A', 'B']:
-        fwd_dir = op.join(paths.get_path('eeg', study=study), 'src')
-        return mne.read_forward_solution(
-            op.join(fwd_dir, 'DiamSar-fsaverage-oct-6-fwd.fif'), verbose=False)
+    fwd_dir = paths.get_path('src', study=study)
+    fname = op.join(fwd_dir, 'DiamSar-fsaverage-oct-6-fwd.fif')
+    return mne.read_forward_solution(fname, verbose=False)
 
 
 def load_src_sym(paths, **kwargs):
-    import mne
-    src_dir = paths.get_path('fwd')
+    src_dir = paths.get_path('src')
     full_path = op.join(src_dir, 'DiamSar-fsaverage_sym-oct-6-src.fif')
     src_sym = mne.read_source_spaces(full_path, verbose=False)
     return src_sym
@@ -218,7 +255,10 @@ def load_psd(path, study='C', eyes='closed', space='avg',
 
 
 def read_linord(paths):
-    '''Read linear order behavioral aggregated files.'''
+    '''Read linear order behavioral aggregated files.
+
+    This function is not used in "Three times NO" paper.
+    '''
     root_dir = paths.get_path('main', study='C')
     beh_dir = op.join(root_dir, 'bazy')
     df = pd.read_excel(op.join(beh_dir, 'transitive.xls'))
