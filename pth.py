@@ -90,6 +90,21 @@ def set_paths(base_dir=None):
             paths.add_path('chanpos', 'chanpos', study=study,
                            relative_to='eeg', validate=False)
 
+    paths.register_study('D', tasks=['rest'])
+    study_D_path = Path(base_dir, 'PREDiCT (do 3xNO)')
+    has_D = study_D_path.exists()
+
+    if has_D:
+        paths.add_path('main', study_D_path, study='D')
+        paths.add_path('eeg', 'eeg', study='D')
+        paths.add_path('src', 'src', study='D', relative_to='eeg')
+
+        # task-specific
+        for task in ['rest']:
+            paths.add_path('eeg', 'rest_clean_exported',
+                           study='D', task=task, relative_to='eeg',
+                           validate=False)
+
     # getting files
     # -------------
     # getting files is not yet supported in borsar.Paths so we write a few
