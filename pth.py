@@ -85,11 +85,6 @@ def set_paths(base_dir=None):
         paths.add_path('eeg', translate['rest'] + '_clean_exported', study='A',
                        task='rest', relative_to='eeg', validate=False)
 
-    for study, has_study in zip(['A', 'B', 'C'], [has_A, has_B, has_C]):
-        if has_study:
-            paths.add_path('chanpos', 'chanpos', study=study,
-                           relative_to='eeg', validate=False)
-
     paths.register_study('D', tasks=['rest'])
     study_D_path = Path(base_dir, 'PREDiCT (do 3xNO)')
     has_D = study_D_path.exists()
@@ -105,11 +100,17 @@ def set_paths(base_dir=None):
                            study='D', task=task, relative_to='eeg',
                            validate=False)
 
+    for study, has_study in zip(['A', 'B', 'C', 'D'],
+                                [has_A, has_B, has_C, has_D]):
+        if has_study:
+            paths.add_path('chanpos', 'chanpos', study=study,
+                           relative_to='eeg', validate=False)
+
     # getting files
     # -------------
     # getting files is not yet supported in borsar.Paths so we write a few
     # functions for that
-    files_id_mode = dict(A='anon', B='num', C='num')
+    files_id_mode = dict(A='anon', B='num', C='num', D='num')
 
     for study in paths.studies:
         files[study] = dict()
@@ -117,7 +118,7 @@ def set_paths(base_dir=None):
             files[study][task] = list()
 
     # check files
-    for study, has_study in zip(list('ABC'), [has_A, has_B, has_C]):
+    for study, has_study in zip(list('ABCD'), [has_A, has_B, has_C, has_D]):
         if has_study:
             scan_files(study=study)
 
@@ -126,7 +127,7 @@ def set_paths(base_dir=None):
     from .io import (load_GH, load_chanord, load_neighbours, load_info,
                      load_forward, load_src_sym, read_bdi, load_psd)
 
-    for study, has_study in zip(list('ABC'), [has_A, has_B, has_C]):
+    for study, has_study in zip(list('ABCD'), [has_A, has_B, has_C, has_D]):
         if has_study:
             paths.register_data('GH', load_GH, study=study, cache=True)
             paths.register_data('chanord', load_chanord, study=study,
