@@ -9,7 +9,7 @@ from borsar.viz import Topo
 
 from sarna.viz import prepare_equal_axes
 
-from . import freq
+from . import freq, analysis, utils
 from .analysis import load_stat
 from .utils import colors
 
@@ -42,8 +42,8 @@ def plot_grid_cluster(stats_clst, contrast, vlim=3):
     stats_clst : pandas.DataFrame
         DataFrame with information about all cluster-based analyses.
     contrast : str
-        Statistical contrast represented as string. For example ``'cvsd'``
-        means controls vs diagnosed.
+        Statistical contrast represented as string. See
+        ``DiamSar.analysis.run_analysis`` for contrast description.
     vlim : float
         Value limits for the topomap colormap (in values of the t statistic).
 
@@ -52,8 +52,8 @@ def plot_grid_cluster(stats_clst, contrast, vlim=3):
     fig : matplotlib.Figure
         Matplotlib figure with visualized results.
     '''
-    fig = plt.figure(figsize=(9, 6))
-    ax = prepare_equal_axes(fig, [2, 3], space=[0.12, 0.85, 0.02, 0.8])
+    fig = plt.figure(figsize=(9, 7.5))
+    ax = prepare_equal_axes(fig, [2, 3], space=[0.12, 0.85, 0.02, 0.65])
 
     example_stat = load_stat(study='C', contrast='cvsd', space='avg')
     vmin, vmax = -vlim, vlim
@@ -90,7 +90,7 @@ def plot_grid_cluster(stats_clst, contrast, vlim=3):
             this_ax.set_xlim((-axis_limit, axis_limit))
 
     # add colorbar
-    cbar_ax = fig.add_axes([0.87, 0.08, 0.03, 0.67])
+    cbar_ax = fig.add_axes([0.87, 0.08, 0.03, 0.55])
     cbar = plt.colorbar(mappable=topo.img, cax=cbar_ax)
     cbar.set_label('t values', fontsize=12)
 
@@ -101,11 +101,11 @@ def plot_grid_cluster(stats_clst, contrast, vlim=3):
         box = this_ax.get_position()
         mid_x = box.corners()[:, 0].mean()
 
-        plt.text(mid_x, 0.87, letter, va='center', ha='center',
+        plt.text(mid_x, 0.72, letter, va='center', ha='center',
                  transform=fig.transFigure, fontsize=21)
 
         if idx == 1:
-            plt.text(mid_x, 0.935, 'STUDY', va='center', ha='center',
+            plt.text(mid_x, 0.8, 'STUDY', va='center', ha='center',
                      transform=fig.transFigure, fontsize=21)
 
     # add reference labels
@@ -124,11 +124,16 @@ def plot_grid_cluster(stats_clst, contrast, vlim=3):
     plt.text(0.03, mid_y, 'REFERENCE', va='center', ha='center',
              transform=fig.transFigure, fontsize=21, rotation=90)
 
+    cntrst = utils.translate_contrast[contrast]
+    fig.suptitle('{} contrast'.format(cntrst), fontsize=22, fontweight='bold')
+    fig.text(0.5, 0.895, 'cluster-based permutation test results', fontsize=21,
+             va='center', ha='center')
+
     return fig
 
 
 def plot_multi_topo(psds_avg, info_frontal, info_asy):
-    '''Creating combined Topo object for multiple psds'''
+    '''Creating combined Topo object for multiple psds.'''
     axis_limit = 2.25
     fig = plt.figure(figsize=(7, 6))
     axs = prepare_equal_axes(fig, [2, 2], space=[0.12, 0.8, 0.02, 0.85],
@@ -177,6 +182,8 @@ def plot_multi_topo(psds_avg, info_frontal, info_asy):
     return fig, axs
 
 
+# - [ ] consider adding CI per swarm
+# - [ ] consider adding effsize and bootstrapped CIs
 def plot_swarm(df, ax=None, ygrid=True):
     '''
     Swarmplot for single channel pairs asymmetry. Used for group contrast
@@ -286,6 +293,7 @@ def plot_swarm_grid(study, space, contrast):
     return fig
 
 
+# - [ ] compare and merge with the function in utils
 def create_swarm_df(psd_high, psd_low):
     df_list = list()
     groups = ['diag'] * psd_high.shape[0] + ['hc'] * psd_low.shape[0]
@@ -295,60 +303,93 @@ def create_swarm_df(psd_high, psd_low):
     return df_list
 
 
-def plot_heatmap_add1(clst):
-    '''Plot results of Standardized Analyses (ADD1) with heatmap and topo.'''
-    fig = plt.figure(figsize=(7, 9))
-    gs = fig.add_gridspec(2, 2, top=0.95, bottom=0.05, left=0.08, right=0.88,
-                          height_ratios=[0.6, 0.4], hspace=0.4, wspace=0.25)
-    f_ax1 = fig.add_subplot(gs[0, :])
-    f_ax2 = fig.add_subplot(gs[1, 0])
-    f_ax3 = fig.add_subplot(gs[1, 1])
+def plot_heatmap_add1(clst, ax_dict=None, scale=None):
+    '''Plot results of Analyses on Standardized data (ADD1) with heatmap
+    and topomap.
+
+    Parameters
+    ----------
+    clst : borsar.Clusters
+        Cluster-based permutation test result.
+
+    Returns
+    -------
+    fig : matplotlib Figure
+        Matplotlib figure object.
+    obj_dict : dict
+        Dictionary with axes of the figure. The dictionary contains:
+        * 'heatmap': heatmap axis
+        * 'colorbar': colorbar axis
+        * 'topo1': lower frequency topography
+        * 'topo2': higher frequency topography
+    '''
+    if ax_dict is None:
+        fig = plt.figure(figsize=(7, 9))
+        gs = fig.add_gridspec(2, 2, top=0.95, bottom=0.05, left=0.08,
+                              right=0.88, height_ratios=[0.6, 0.4], hspace=0.4,
+                              wspace=0.25)
+        f_ax1 = fig.add_subplot(gs[0, :])
+        f_ax2 = fig.add_subplot(gs[1, 0])
+        f_ax3 = fig.add_subplot(gs[1, 1])
+    else:
+        f_ax1, f_ax2, f_ax3 = (ax_dict['heatmap'], ax_dict['topo1'],
+                               ax_dict['topo2'])
+        fig = f_ax1.figure
+
+    if scale is None:
+        scale = dict(heatmap_xlabel=22, heatmap_ylabel=22, cbar_label=20,
+                     heatmap_xticklabels=18, cbar_yticklabels=16,
+                     topo_title=18, markersize=8)
 
     clst_idx = [0, 1] if len(clst) > 1 else None
     clst.plot(dims=['chan', 'freq'], cluster_idx=clst_idx, axis=f_ax1,
               vmin=-4, vmax=4, alpha=0.65)
-    f_ax1.set_xlabel('Frequency (Hz)', fontsize=22)
-    f_ax1.set_ylabel('frontal channels', fontsize=22)
+    f_ax1.set_xlabel('Frequency (Hz)', fontsize=scale['heatmap_xlabel'])
+    f_ax1.set_ylabel('frontal channels', fontsize=scale['heatmap_ylabel'])
 
     contrast = clst.description['contrast']
     cbar_label = ('Regression t value' if 'reg' in contrast
                   else 't value')
     cbar_ax = fig.axes[-1]
-    cbar_ax.set_ylabel(cbar_label, fontsize=20)
+    cbar_ax.set_ylabel(cbar_label, fontsize=scale['cbar_label'])
 
     # change ticklabels fontsize
     for tck in f_ax1.get_xticklabels():
-        tck.set_fontsize(18)
+        tck.set_fontsize(scale['heatmap_xticklabels'])
 
     for tck in cbar_ax.get_yticklabels():
-        tck.set_fontsize(16)
+        tck.set_fontsize(scale['cbar_yticklabels'])
 
     freqs1, freqs2 = (9, 10), (11.5, 12.50)
     freqlabel1, freqlabel2 = '9 - 10 Hz', '11.5 - 12.5 Hz'
     idx1, idx2 = None, None
 
-    if contrast == 'dreg' and clst.description['study'] == 'C':
+    show_p = ((contrast == 'dreg' and clst.description['study'] == 'C')
+              or (contrast == 'cvsd' and clst.description['study'] == 'C')
+              or (contrast == 'cdreg' and clst.description['study'] == 'C'))
+    if show_p:
         freqlabel1 += '\np = {:.3f}'.format(clst.pvals[1])
         freqlabel2 += '\np = {:.3f}'.format(clst.pvals[0])
         idx1, idx2 = 1, 0
 
     # topo 1
-    mark_kwargs = {'markersize': 8}
+    mark_kwargs = {'markersize': scale['markersize']}
     topo_args = dict(vmin=-4, vmax=4, mark_clst_prop=0.3,
                      mark_kwargs=mark_kwargs, border='mean')
     tp1 = clst.plot(cluster_idx=idx1, freq=freqs1, axes=f_ax2, **topo_args)
-    tp1.axes.set_title(freqlabel1, fontsize=18)
+    tp1.axes.set_title(freqlabel1, fontsize=scale['topo_title'])
 
     # topo 2
     tp2 = clst.plot(cluster_idx=idx2, freq=freqs2, axes=f_ax3, **topo_args)
-    tp2.axes.set_title(freqlabel2, fontsize=18)
+    tp2.axes.set_title(freqlabel2, fontsize=scale['topo_title'])
 
     obj_dict = {'heatmap': f_ax1, 'colorbar': cbar_ax, 'topo1': tp1,
                 'topo2': tp2}
     return fig, obj_dict
 
 
-def bdi_bdi_histogram(bdi):
+# TODO: compare with the one in script to see which one is used in the paper
+def bdi_histogram(bdi):
     '''Plot BDI histogram from ``bdi`` dataframe of given study.'''
     msk = bdi.DIAGNOZA
     bdi_col = [c for c in bdi.columns if 'BDI' in c][0]
@@ -394,7 +435,7 @@ def plot_panel(bdi, bar_h=0.6, seed=22):
 
     # regression data
     noise = random_state.uniform(low=0, high=10, size=bdi.shape[0])
-    y = bdi['BDI-II'].values * 0.1 + noise
+    y = bdi['BDI-II'].values * - 0.1 + noise
     bdi.loc[:, 'y'] = y
 
     # regression groups
@@ -457,7 +498,7 @@ def plot_panel(bdi, bar_h=0.6, seed=22):
     # ----------
     axs[0, 1].set_ylabel("")
     axs[0, 1].set_xticklabels([])
-    axs[0, 1].set_xlabel('BDI')
+    axs[0, 1].set_xlabel('BDI', fontsize=17)
 
     for ax in axs[0, :]:
         # equal tick spacing through data range
@@ -472,7 +513,7 @@ def plot_panel(bdi, bar_h=0.6, seed=22):
     for ax in axs[1, :]:
         # limits, labels and ticks
         ax.set_xlim((0, 50))
-        ax.set_xlabel('BDI')
+        ax.set_xlabel('BDI', fontsize=17)
         ax.set_ylabel('')
         ax.set_xticks([0, 10, 20, 30, 40, 50])
 
@@ -484,6 +525,8 @@ def plot_panel(bdi, bar_h=0.6, seed=22):
         # add grid
         ax.xaxis.grid(color=[0.88, 0.88, 0.88], linewidth=2,
                       zorder=0, linestyle='--')
+
+    axs[0, 0].set_xticklabels(['diagnosed', 'healthy\ncontrols'], fontsize=17)
 
     axs[1, 0].set_ylim((-2.5, -0.5))
     axs[1, 0].set_yticks([cntr2, cntr1])
@@ -631,3 +674,274 @@ def _create_group_rectangles(bar1y, bar2y, bar_h, second_min_diag_bdi,
     rct4 = plt.Rectangle((10, bar2y), 40, bar_h,
                          color=colors['subdiag'], zorder=5)
     return [rct1, rct2, rct3, rct4]
+
+
+def _pairs_aggregated_studies(space, contrast):
+    '''
+    Read all studies that include given contrast and aggregate their data.
+
+    Used when plotting aggregated channel pairs figures (``plot_aggregated``).
+    '''
+    if contrast in ['cvsd', 'dreg']:
+        studies = ['A', 'C']
+    elif contrast in ['cvsc', 'creg']:
+        studies = ['B', 'C']
+    elif contrast ==  'cdreg':
+        studies = ['C']
+
+    psds = {'high': list(), 'low': list()}
+    for study in studies:
+        psd_high, psd_low, ch_names = freq.get_psds(
+                            selection='asy_pairs', study=study,
+                            space=space, contrast=contrast)
+        psds['low'].append(psd_low)
+        psds['high'].append(psd_high)
+
+    low = np.concatenate(psds['low'], axis=0)
+    high = np.concatenate(psds['high'], axis=0)
+
+    studies = [utils.utils.translate_study[std] for std in studies]
+    return high, low, studies, ch_names
+
+
+def _compute_stats_group(high, low, ch_idx=0):
+    '''Used when plotting aggregated channel pairs figures
+    (``plot_aggregated``).'''
+    from scipy.stats import ttest_ind
+    stats = analysis.esci_indep_cohens_d(
+        high[:, ch_idx], low[:, ch_idx])
+
+    nx, ny = high.shape[0], low.shape[0]
+    t, p = ttest_ind(high[:, ch_idx], low[:, ch_idx])
+    out = pg.bayesfactor_ttest(t, nx, ny, paired=False)
+    bf01 = 1 / float(out)
+    stats.update({'bf01': bf01})
+
+    return stats
+
+
+def _compute_stats_regression(data1, data2, ch_idx=0):
+    '''Used when plotting aggregated channel pairs figures
+    (``plot_aggregated``).'''
+    stats = analysis.esci_regression_r(data1[:, ch_idx], data2)
+
+    nx = data1.shape[0]
+    out = pg.bayesfactor_pearson(stats['es'], nx)
+    bf01 = 1 / float(out)
+    stats.update({'bf01': bf01})
+
+    return stats
+
+
+def _plot_dist_esci(ax, ypos, stats, color=None):
+    '''Plots a single bootstraps distribution along with effect size and
+    bootstrap confidence interval for the effect size.
+
+    Used when plotting aggregated channel pairs figures (``plot_aggregated``).
+    '''
+    from dabest.plot_tools import halfviolin
+
+    color = color if color is not None else ds.utils.colors['hc']
+
+    v = ax.violinplot(stats['bootstraps'], positions=[ypos],
+                      showextrema=False, showmedians=False,
+                      widths=0.5, vert=False)
+    halfviolin(v, fill_color=color, alpha=0.85, half='top')
+
+    line_color = np.array([0] * 3) / 255
+    ax.plot(stats['es'], [ypos], marker='o', color=line_color,
+                       markersize=12, zorder=6)
+    ax.plot(stats['ci'], [ypos, ypos], linestyle="-", color=line_color,
+            linewidth=3.5, zorder=5)
+    return v
+
+
+def plot_aggregated(ax=None, eff='d'):
+    '''Plot aggregated effect sizes, confidence intervals and bayes factors for
+    channel pairs analyses.
+
+    ax : matplotlib axis
+        Axis to plot to.
+    eff : str
+        Effect size to plot. ``'r'`` shows effects for linear relationship
+        analyses with Pearson's r as the effect size. ``'d'`` shows effects for
+        group contrasts with Cohen's d as the effect size. Defaults to ``'d'``.
+
+    Returns
+    -------
+    ax: matplotlib axis
+        Axis used to plot to.
+    '''
+
+    if ax is None:
+        # create axis to plot to
+        fig_size = (11, 13.5) if eff == 'r' else (11, 12)
+        gridspec = ({'left': 0.25, 'bottom': 0.1, 'right': 0.85} if eff == 'r'
+                    else {'left': 0.18, 'bottom': 0.1, 'right': 0.8})
+        fig, ax = plt.subplots(figsize=fig_size, gridspec_kw=gridspec)
+
+    ypos = 5
+    labels_pos = list()
+    labels = list()
+
+    # 'd' vs 'r' effect size (group contrasts vs linear relationships)
+    addpos = 0.09 if eff == 'd' else 0.065
+    stat_fun = (_compute_stats_group if eff == 'd'
+                else _compute_stats_regression)
+    distr_color = (ds.utils.colors['hc'] if eff == 'd'
+                   else ds.utils.colors['subdiag'])
+    contrasts = ['cvsd', 'cvsc'] if eff == 'd' else ['dreg', 'creg', 'cdreg']
+
+    for contrast in contrasts:
+        for space in ['avg', 'csd']:
+            # get relevant data
+            data1, data2, studies, ch_names = _pairs_aggregated_studies(
+                space, contrast)
+
+            # channel pair loop
+            for ch_idx in range(2):
+                # compute es, bootstrap esci and bf01
+                stats = stat_fun(data1, data2, ch_idx=ch_idx)
+
+                # plot distribution, ES and CI
+                v = _plot_dist_esci(ax, ypos, stats, color=distr_color)
+                v['bodies'][0].set_zorder(4)
+
+                # slight y tick labeling differences
+                if len(studies) == 2:
+                    label_schematic = ('{}, {}\n{}\nstudies {} & {}'
+                                       if eff == 'd'
+                                       else '{}, {}\n{}, studies {} & {}')
+                    label = label_schematic.format(
+                        utils.translate_contrast[contrast], space.upper(),
+                        ch_names[ch_idx], studies[0], studies[1])
+                else:
+                    label = '{}, {}\n{}, study {}'.format(
+                        utils.translate_contrast[contrast], space.upper(),
+                        ch_names[ch_idx], studies[0])
+
+                labels_pos.append(ypos)
+                labels.append(label)
+
+                # add bf01 text:
+                bf_text = '{:.2f}'.format(stats['bf01'])
+                ax.text(stats['es'], ypos + addpos, bf_text, fontsize=16,
+                        horizontalalignment='center', color='w', zorder=7)
+
+                ypos -= 0.5
+
+    # aesthetics
+    # ----------
+    lims = (-1.25, 1.25) if eff == 'd' else (-0.7, 0.7)
+    xticks = ([-1, -0.5, 0, 0.5, 1] if eff == 'd'
+              else [-0.6, -0.3, 0, 0.3, 0.6])
+    xlab = ("Effect size\n(Cohen's d)" if eff == 'd'
+            else "Effect size\n(Pearson's r)")
+    cntr = 'group contrasts' if eff == 'd' else 'linear relationships'
+
+    ax.set_xlim(lims)
+    plt.yticks(labels_pos, labels, fontsize=15)
+    plt.xticks(xticks, fontsize=15)
+    ylim = ax.get_ylim()
+
+    ax.grid(color=[0.85, 0.85, 0.85], linewidth=1.5, linestyle='--')
+    ax.vlines(0, ymin=ylim[0], ymax=ylim[1], color=[0.5] * 3, lw=2.5)
+    ax.set_ylim(ylim) # make sure vlines do not change y lims
+
+    ax.set_xlabel(xlab, fontsize=20)
+    ax.set_title('Aggregated channel pair results\nfor {}'.format(cntr),
+                 fontsize=24, pad=25)
+    return ax
+
+
+def full_fig5_supplement_plot(contrast, studies):
+    '''Plot whole panel plot for figure 5 supplements, for given contrast
+    and studies.
+
+    Parameters
+    ----------
+    contrast : str
+        Statistical contrast to use. See ``DiamSar.analysis.run_analysis``
+        for contrast desctription.
+    studies : list of studies
+        Studies to use. See ``DiamSar.analysis.run_analysis`` for study
+        description.
+        '''
+    scale = dict(heatmap_xlabel=15, heatmap_ylabel=15, cbar_label=12,
+                 heatmap_xticklabels=14, cbar_yticklabels=10,
+                 topo_title=14, markersize=5)
+
+    spaces = ['avg', 'csd']
+    fig = plt.figure(figsize=(10, 9))
+    gs = fig.add_gridspec(4, 4, top=0.85, bottom=0.05, left=0.15,
+                          right=0.9, height_ratios=[0.6, 0.4, 0.6, 0.4],
+                          hspace=0.75, wspace=1.)
+
+    for study_idx, study in enumerate(studies):
+        for space_idx, space in enumerate(spaces):
+            # create axes
+            # -----------
+            row_idx = space_idx * 2
+            col_idx = [study_idx * 2, study_idx * 2 + 1]
+            f_ax1 = fig.add_subplot(gs[row_idx, col_idx[0]:col_idx[1] + 1])
+            f_ax2 = fig.add_subplot(gs[row_idx + 1, col_idx[0]])
+            f_ax3 = fig.add_subplot(gs[row_idx + 1, col_idx[1]])
+
+            # modify topo axes position
+            # -------------------------
+            pos1 = list(f_ax2.get_position().bounds)
+            pos2 = list(f_ax3.get_position().bounds)
+            w, h = pos1[2], pos1[3]
+            pos1[1] -= h * 0.334
+            pos1[2] *= 1.334
+            pos1[3] *= 1.334
+            f_ax2.set_position(pos1)
+
+            pos2[0] -= w * 0.334
+            pos2[1] -= h * 0.334
+            pos2[2] *= 1.334
+            pos2[3] *= 1.334
+            f_ax3.set_position(pos2)
+
+            # read cluster results
+            clst = ds.analysis.load_stat(study=study, contrast=contrast,
+                                         space=space, stat_dir='stats add1',
+                                         avg_freq=False, selection='frontal',
+                                         transform=['log', 'zscore'])
+            # sort channels left to right
+            # (does not affect results, only channel order)
+            clst = ds.analysis.sort_clst_channels(clst)
+
+            # plot heatmap + two topographies
+            ax_dict = dict(heatmap=f_ax1, topo1=f_ax2, topo2=f_ax3)
+            fig, obj_dct = ds.viz.plot_heatmap_add1(clst, ax_dict=ax_dict,
+                                                    scale=scale)
+
+            # remove requency xlabel when topo titles are two lines long
+            # (otherwise there is ugly text overlap)
+            n_lines = [len(obj_dct[key].axes.get_title().split('\n'))
+                       for key in ['topo1', 'topo2']]
+            longer_line = (np.array(n_lines) > 1).any()
+            if longer_line:
+                obj_dct['heatmap'].set_xlabel('')
+
+            # label rows, columns
+            if study_idx == 0:
+                # label row
+                pos_y = pos1[1] + 1.5 * pos1[3]
+                text = space.upper()
+                plt.text(0.075, pos_y, text, va='center', ha='center',
+                         transform=fig.transFigure, fontsize=21,
+                         rotation=90)
+
+            if row_idx == 0:
+                # label column
+                pos_x = pos1[0] + 1.15 * pos1[2]
+                text = 'STUDY {}'.format(ds.utils.translate_study[study])
+                plt.text(pos_x, 0.885, text, va='center', ha='center',
+                         transform=fig.transFigure, fontsize=21)
+
+    contrast_name = ds.utils.translate_contrast[contrast]
+    fig.suptitle('{} contrast'.format(contrast_name), fontsize=24,
+                 fontweight='bold')
+    return fig

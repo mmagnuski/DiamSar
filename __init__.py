@@ -18,8 +18,6 @@ from .io import (read_bdi, set_or_join_annot,
                  warnings_to_ignore_when_reading_files)
 
 
-# TODO:
-# - [ ] what should we read when `src` space is chosen (raw, events, fwd)?
 def read_raw(fname, study='C', task='rest', space='avg'):
     '''
     Read a raw file and its events using the DiamSar reading pipeline.
@@ -123,6 +121,7 @@ def read_raw(fname, study='C', task='rest', space='avg'):
                 sys._enablelegacywindowsfsencoding()
 
         # read annotations
+        # FIXME: could use encoding='ANSI' for study B?
         annot = read_rej(op.join(data_path, rej_file), raw.info['sfreq'])
 
         # set annotations or add to those already present
@@ -173,6 +172,8 @@ def read_beh(fname, study='C', task='sternberg'):
     -------
     beh : pandas.DataFrame
         Behavioral data for given subject, in given task from given study.
+
+    This function is not used in "Three times NO" paper.
     '''
     if task == 'sternberg':
         beh_dir = pth.paths.get_path('beh', task='sternberg')
@@ -189,10 +190,16 @@ def read_beh(fname, study='C', task='sternberg'):
 
 # coreg stuff
 # -----------
+# - [ ] CONSIDER removing as obsolete
 def create_dig_montage(inst, montage=None, dig_ch_pos=True, hsp=True,
                        scale=1 / 1000., coords=None):
     '''
     Create DigMontage from Montage or digitization dataframe.
+
+    This function was used to create custom digitization in earlier mne
+    versions. However, since then, this has become much easier in recent mne
+    versions, so this function has become obsolete. Also - it is likely not to
+    work on recent mne versions.
 
     Parameters
     ----------

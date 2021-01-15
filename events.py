@@ -59,6 +59,8 @@ def fix_epochs(raw, events, tmin=-0.2, tmax=0.5):
     -------
     epochs : instance of mne.Epochs
         Raw data epoched with respect to fixation events.
+
+    This function is not used in "Three times NO" paper.
     '''
     event_types = np.unique(events[:, -1])
     fix_types = event_types[(event_types > 99) & (event_types < 111)]
@@ -78,6 +80,8 @@ def change_events_sternberg(events):
     starts maintenance period with 5 elements held in memory.
     Iformation about load can also be obtained from probe event value using
     the following formula: `int((probe_event - 1) / 10) + 1`.
+
+    This function is not used in "Three times NO" paper.
     '''
     is_probe = (events[:, -1] > 10) & (events[:, -1] < 21)
     where_probe = np.where(is_probe)[0]
@@ -134,7 +138,10 @@ def change_events_sternberg(events):
 
 
 def get_probe_events(events):
-    '''Returns probe events coded by load (irrespective of probe value)'''
+    '''Returns probe events coded by load (irrespective of probe value).
+
+    This function is not used in "Three times NO" paper.
+    '''
     is_probe = (events[:, -1] > 10) & (events[:, -1] < 100)
     probe_events = events[is_probe, :]
     loads = ((probe_events[:, -1] - 1) / 10).astype('int') + 1

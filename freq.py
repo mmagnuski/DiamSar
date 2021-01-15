@@ -130,6 +130,7 @@ def format_psds(psds, freq, freq_range=(8, 13), average_freq=False,
             rgt = psds[:, sel['rh'] + n_vert[1]]
             ch_names = sel['rh'] + n_vert[1]
 
+        # compute asymmetry
         psds = rgt - lft
         if div_by_sum:
             psds /= rgt + lft
@@ -149,7 +150,7 @@ def format_psds(psds, freq, freq_range=(8, 13), average_freq=False,
 
 
 def select_channels_special(info, selection):
-    '''Handles special case of 'asy_pairs', otherwise uses
+    '''Handles special case of 'asy_pairs' channel selection, otherwise uses
     ``borsar.select_channels``.'''
 
     if not selection == 'asy_pairs':
@@ -177,7 +178,6 @@ def select_channels_special(info, selection):
     return selection
 
 
-# change to a save function that saves and loads multiple vars
 def save_psd(fname, psd, freq, ch_names, subject_id):
     from scipy.io import savemat
     savemat(fname, {'psd': psd, 'freq': freq, 'ch_names': ch_names,
@@ -190,7 +190,37 @@ def compute_all_rest(study='C', event_id=None, tmin=1., tmax=60., winlen=2.,
     Compute power spectral density for all subjects in given study and save
     results to disk.
 
-    FIXME - describe arguments !
+    Parameters
+    ----------
+    study : str
+        Study to use.
+    event_id : int | None
+        Event id that starts periods of signal to compute psd for.
+        This is only relevant in study C, where both eyes closed (event_id: 11)
+        and eyes open (event_id: 10) segments are available.
+    tmin : float
+        Start of the signal to consider. If event_id is None the tmin is with
+        respect of the signal start, else it is with respect to each event
+        that is event_id.
+    tmax : float
+        End of the signal to consider. If event_id is None the tmax is with
+        respect of the signal start, else it is with respect to each event
+        that is event_id.
+    winlen : float
+        Welch window length in seconds. The default is ``2.``.
+    step : float
+        Welch window step in seconds. The default is ``0.5``.
+    space : str
+        Signal space to use: ``'avg'`` for average referenced, ``'csd'`` for
+        Current Source Density and ``'src'`` for source space.
+    progressbar : str
+        FIXME
+    save_dir : str | None
+        FIXME
+
+    Returns
+    -------
+    FIXME
     '''
     from . import read_raw
 
@@ -234,12 +264,14 @@ def compute_all_rest(study='C', event_id=None, tmin=1., tmax=60., winlen=2.,
 # TODO:
 # - [ ] why make_csd_rest_approx did not return NaNs for the subject that
 #       has NaNs both in channel data and make_csd_morlet_raw?
-# - [x] compare csd's between cnt and raw versions
 def make_csd_rest_approx(raw, frequencies, events=None, event_id=None,
                          tmin=None, tmax=None, n_jobs=1, n_cycles=7.,
                          decim=4, segment_length=1.):
     '''Approximate CSD for continuous signals by segmenting and computing CSD
     on segments.
+
+    This function is not used in the "Three time NO" paper - it servers as a
+    comparison.
 
     Parameters
     ----------
@@ -293,11 +325,10 @@ def make_csd_rest_approx(raw, frequencies, events=None, event_id=None,
 
 
 # - [ ] LATER this might go to borsar
+# - [ ] FIXME - could use picks...
 def make_csd_morlet_raw(raw, freqs, events=None, event_id=None, tmin=0.,
                         tmax=10., n_cycles=3., decim=1):
     '''Calculate cross-spectral density on raw data.
-
-    FIXME - could use picks...
 
     Parameters
     ----------
@@ -320,6 +351,11 @@ def make_csd_morlet_raw(raw, freqs, events=None, event_id=None, tmin=0.,
     n_cycles : int | list of int
         Number of cycles to use when computing cross spectral density. Defaults
         to 7.
+
+    Returns
+    -------
+    csd : CrossSpectralDensity
+        Cross spectral density of the data.
     '''
     from mne.time_frequency.csd import CrossSpectralDensity
 
@@ -380,7 +416,25 @@ def _apply_annot_to_tfr(annot, tfr, sfreq, freqs, n_cycles, orig_sample=0,
     '''Fill TFR data with `fill_value` where bad annotations are present.
     Useful mostly when dealing with continuous TFR.
 
-    FIXME: describe arguments
+    Parameters
+    ----------
+    annot : mne.Annotations
+        Annotations to apply to time-frequency data.
+    tfr : np.ndarray
+        Numpy array of time-frequncy data.
+    sfreq : float
+        Sampling freuqency.
+    n_cycles : int
+        Extend each annotation by this number of cycles.
+    orig_sample : int
+        ...
+    fill_value : float
+        What to fill the data overlapping with the annotation. Defaults to
+        np.nan.
+
+    Returns
+    -------
+    Does not return anything, works in-place!
     '''
     n_times = tfr.shape[-1]
     n_times_rej = 0
@@ -435,15 +489,47 @@ def _deal_with_csd_inputs(tmin, tmax, events, event_id):
         return events, tmin, tmax
 
 
-def get_psds(study='C', space='avg', contrast='cvsd', selection='frontal'):
-    '''Reading psds for selected channels, space and contrast.
+def get_psds(study='C', space='avg', contrast='cvsd', selection='frontal',
+             lower_threshold=None, higher_threshold=None):
+    '''
+    Read psds for selected channels, space and contrast.
+
+    This is a simplified function that does not allow selection of the
+    frequency range and that alyways averages power in the default range.
+    To get access to the raw psd data and have full control of how its handled
+    use:
+    from DiamSar.pth import paths
+    psds, freq, ch_names, subj_id = paths.get_data(
+            'psd', study=study, eyes=eyes, space=space)
+
+    Parameters
+    ----------
+    study : str
+        Study to use.
+    space : str
+        Signal space: "avg", "csd" or "src".
+    selection : str
+        Channel selection to employ.
+    lower_threshold : float
+        BDI threshold for the low-bid group. FIXME - inclusive (<=) or exclusinve?
+    higher_threshold : float
+        BDI threshold for the high-bid group (depressed or subclinical
+        individuals depending on chosen contrast). FIXME - inclusive (<=) or exclusinve?
 
     Returns
     -------
-    If regression contrast is asked for the return variables are:
-    psd_sel, info_sel, bdi_sel
-    otherwise the output is:
-    psd_high, psd_low, info_sel
+    data1 : numpy array
+        For group contrasts this is average alpha power/asymmetry in the
+        high-bdi group (depressed or subclinical individuals depending on
+        chosen contrast). For regression contrasts this is alpha
+        power/asymmetry for all selected participants.
+    data2 : numpy array
+        For group contrasts this is average alpha power/asymmetry in the
+        low-bdi group (healthy control individuals). For regression contrasts
+        this is the bdi for all selected participants.
+    ch_names : list of str | mne.Info
+        List of channel names - when selection is ``'asy_pairs'`` or mne
+        Info object otherwise.
     '''
     from .utils import group_bdi
     from . import freq
@@ -453,7 +539,15 @@ def get_psds(study='C', space='avg', contrast='cvsd', selection='frontal'):
         'psd', study=study, space=space)
     info = pth.paths.get_data('info', study=study)
 
-    grp = group_bdi(subj_id, bdi, method=contrast)
+    # remove NaN's
+    no_nans = ~np.any(np.isnan(psds), axis=(1, 2))
+    if not np.all(no_nans):
+        psds = psds[no_nans]
+        subj_id = subj_id[no_nans]
+
+    grp = group_bdi(subj_id, bdi, method=contrast,
+                    lower_threshold=lower_threshold,
+                    higher_threshold=higher_threshold)
     psd, this_freq, ch_names = freq.format_psds(
         psds, freqs, info=info, selection=selection, average_freq=True)
 
@@ -470,7 +564,7 @@ def get_psds(study='C', space='avg', contrast='cvsd', selection='frontal'):
         # return psd, info, bdi
         psd_sel = psd[grp['selection']]
         bdi_sel = grp['bdi']
-        return psd_sel, info_sel, bdi_sel
+        return psd_sel, bdi_sel, info_sel
     else:
         psd_high = psd[grp['high']]
         psd_low = psd[grp['low']]
