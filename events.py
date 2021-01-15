@@ -5,6 +5,12 @@ def get_task_event_id(raw, event_id, study='C', task='rest'):
     if task == 'rest':
         if study == 'C':
             event_id.update({'S 10': 10, 'S 11': 11})
+        elif study == 'D':
+            def event_id(name):
+                if 'keyboard' in name:
+                    return 99
+                else:
+                    return int(name)
         return event_id
     elif task == 'sternberg':
         if raw.annotations is not None:
@@ -16,6 +22,21 @@ def get_task_event_id(raw, event_id, study='C', task='rest'):
                     add_dct[dsc] = int(ints)
             event_id.update(add_dct)
             return event_id
+
+
+def translate_events_D(events):
+    '''Translate PREDiCT triggers to a sane format where they signal event
+    onset.'''
+    close_events = list()
+    types = [[1, 3, 5], [2, 4, 6]]
+    translate_to = [11, 10]
+    for event_types, translate in zip(types, translate_to):
+        for event_type in event_types:
+            all_types = np.where(events[:, -1] == event_type)[0]
+            this_event = events[all_types[0], :]
+            this_event[-1] = translate
+            close_events.append(this_event)
+    return np.stack(close_events, axis=0)
 
 
 def fix_epochs(raw, events, tmin=-0.2, tmax=0.5):

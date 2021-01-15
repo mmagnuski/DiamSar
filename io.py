@@ -66,7 +66,7 @@ def study_C_reformat_beh_table(df):
     '''Select and recode relevant columns from behavioral table.'''
     # select relevant columns
     df = df[['ID', 'DATA BADANIA', 'WIEK', 'PŁEĆ', 'WYKSZTAŁCENIE',
-          'DIAGNOZA', 'BDI-II']]
+             'DIAGNOZA', 'BDI-II']]
     # fix dates
     df.loc[0, 'DATA BADANIA'] = df.loc[1, 'DATA BADANIA']
     df.loc[7, 'WIEK'] = datetime.datetime(df.loc[7, 'WIEK'], 6, 25)

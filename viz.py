@@ -359,7 +359,7 @@ def bdi_bdi_histogram(bdi):
     hc3 = hc[hc > 10]
 
     # gridspec_kw=dict(height_ratios=[0.8, 0.2]))
-    fig, ax = plt.subplots(figsize=(5, 6))
+    fig, ax = plt.subplots(figsize=(5, 4.5))
     if not isinstance(ax, (list, tuple, np.ndarray)):
         ax = [ax]
 
@@ -368,10 +368,10 @@ def bdi_bdi_histogram(bdi):
     plt.hist([hc1, hc2, hc3, diag], bins, stacked=True,
              color=[colors['hc'], colors['mid'], colors['subdiag'],
                     colors['diag']])
-    plt.yticks([0, 5, 10, 15, 20, 25], fontsize=14)
-    plt.ylabel('Number of participants', fontsize=16)
-    plt.xticks([0, 10, 20, 30, 40, 50], fontsize=14)
-    plt.xlabel(bdi_col, fontsize=16)
+    plt.yticks([0, 5, 10, 15, 20, 25], fontsize=16)
+    plt.ylabel('Number of participants', fontsize=23)
+    plt.xticks([0, 10, 20, 30, 40, 50], fontsize=16)
+    plt.xlabel(bdi_col, fontsize=23)
     ax[0].set_xlim((0, 50))
     ax[0].set_ylim((0, 28))
     return fig, ax

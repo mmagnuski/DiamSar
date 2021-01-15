@@ -88,8 +88,15 @@ def read_raw(fname, study='C', task='rest', space='avg'):
                                          task=task)
             events = mne.events_from_annotations(raw, event_id=event_id)[0]
 
+    # special case for PREDiCT data (they don't differentiate
+    # closed eyes start)
+    if study == 'D':
+        from DiamSar.events import translate_events_D
+        events = translate_events_D(events)
+
     # drop stim channel and 'oko' channel if present
-    drop_chan = [ch for ch in raw.ch_names if 'STI' in ch or ch == 'oko']
+    drop_chan = [ch for ch in raw.ch_names
+                 if 'STI' in ch or ch in ['oko', 'HEOG', 'VEOG']]
     raw.drop_channels(drop_chan)
 
     # FIXME: in 0.17 / 0.18 -> boundary annotations should be already present,
