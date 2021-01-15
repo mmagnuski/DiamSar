@@ -16,8 +16,7 @@ import mne
 # paths.get_data(data_type, study=study)
 # where ``paths`` is ``DiamSar.pth.paths``
 
-# FIXME - use in register mode (CHECK - did I mean .get_data(),
-#                               is it already done?)
+# FIXME - use in register mode (CHECK - did I mean .get_data(), is it already done?)
 def read_bdi(paths, study='C', **kwargs):
     '''Read BDI scores and diagnosis status.
 
@@ -53,7 +52,6 @@ def read_bdi(paths, study='C', **kwargs):
     if study == 'A':
         df = pd.read_excel(op.join(beh_dir, 'baza minimal.xlsx'))
         select_col = ['ID', 'BDI_k', 'DIAGNOZA']
-        rename_col = {'BDI_k': 'BDI-I'}
 
         if full_table:
             select_col += ['plec_k', 'wiek']
@@ -64,6 +62,7 @@ def read_bdi(paths, study='C', **kwargs):
         bdi = make_sure_diagnosis_is_boolean(bdi)
 
         # rename columns
+        rename_col = {'BDI_k': 'BDI-I'}
         bdi = bdi.rename(columns=rename_col)
 
         if full_table:
@@ -89,6 +88,7 @@ def read_bdi(paths, study='C', **kwargs):
             bdi = pd.read_excel(op.join(beh_dir, 'BDI.xlsx'), header=None,
                                 names=['ID', 'BDI-I'])
         bdi.loc[:, 'DIAGNOZA'] = False
+
     if study == 'C':
         df = pd.read_excel(op.join(beh_dir, 'BAZA_DANYCH.xlsx'))
         if full_table:
@@ -100,6 +100,21 @@ def read_bdi(paths, study='C', **kwargs):
 
     return bdi.set_index('ID')
 
+    if study == 'D':
+        df = pd.read_excel(op.join(beh_dir, 'subject_data.xlsx'))
+        if full_table:
+            bdi = pd.read_excel(op.join(beh_dir, 'subject_data.xlsx'))
+            sel_col = ['ID','MDD', 'sex', 'age', 'BDI'] # czy są potrzebne jeszcze inne kolumny?
+            sel_col = [col for col in sel_col if col in bdi.columns]
+            bdi = bdi[sel_col]
+        else:
+            bdi = pd.read_excel(op.join(beh_dir, 'subject_data.xlsx'), header=None,
+                                names=['id', 'MDD', 'BDI'])
+
+    return bdi.set_index('ID')
+
+
+
 
 def study_C_reformat_original_beh_table(df):
     '''Select and recode relevant columns from behavioral table.
@@ -107,8 +122,11 @@ def study_C_reformat_original_beh_table(df):
     This function is not used in "Three times NO" paper.
     '''
     # select relevant columns
-    df = df[['ID', 'DATA BADANIA', 'WIEK', 'PŁEĆ', 'WYKSZTAŁCENIE',
-             'DIAGNOZA', 'BDI-II']]
+    sel_col = ['ID', 'DATA BADANIA', 'WIEK', 'PŁEĆ', 'WYKSZTAŁCENIE',
+               'DIAGNOZA', 'BDI-II']
+    sel_col = [col for col in sel_col if col in df.columns]
+    df = df[sel_col]
+
     # fix dates
     df.loc[0, 'DATA BADANIA'] = df.loc[1, 'DATA BADANIA']
     df.loc[7, 'WIEK'] = datetime.datetime(df.loc[7, 'WIEK'], 6, 25)
