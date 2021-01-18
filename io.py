@@ -106,7 +106,11 @@ def read_bdi(paths, study='C', **kwargs):
         if full_table:
             # translate MDD values to more meaningful strings
             translate = {1: 'present', 2: 'past', 50: 'subclinical', 99: 'no'}
-            bdi.loc[:, 'depression'] = [translate[val] for val in bdi.MDD]
+            bdi.loc[:, 'depression'] = bdi.MDD.replace(translate)
+
+            # translate sex to female/male strings
+            relabel = {1: 'female', 2: 'male'}
+            bdi.loc[:, 'sex'] = bdi.sex.replace(relabel)
 
             sel_col = sel_col + ['depression', 'sex', 'age']
 
