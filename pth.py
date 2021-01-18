@@ -85,6 +85,8 @@ def set_paths(base_dir=None):
         paths.add_path('eeg', translate['rest'] + '_clean_exported', study='A',
                        task='rest', relative_to='eeg', validate=False)
 
+    # study D
+    # -------
     paths.register_study('D', tasks=['rest'])
     study_D_path = Path(base_dir, 'PREDiCT (do 3xNO)')
     has_D = study_D_path.exists()
@@ -95,11 +97,10 @@ def set_paths(base_dir=None):
         paths.add_path('src', 'src', study='D', relative_to='eeg')
 
         # task-specific
-        for task in ['rest']:
-            paths.add_path('eeg', 'rest_clean_exported',
-                           study='D', task=task, relative_to='eeg',
-                           validate=False)
+        paths.add_path('eeg', 'rest_clean_exported', study='D',
+                       task='rest', relative_to='eeg', validate=False)
 
+    # chanpos for all studies
     for study, has_study in zip(['A', 'B', 'C', 'D'],
                                 [has_A, has_B, has_C, has_D]):
         if has_study:
