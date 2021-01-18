@@ -89,6 +89,7 @@ def read_bdi(paths, study='C', **kwargs):
             bdi = pd.read_excel(op.join(beh_dir, 'BDI.xlsx'), header=None,
                                 names=['ID', 'BDI-I'])
         bdi.loc[:, 'DIAGNOZA'] = False
+
     if study == 'C':
         df = pd.read_excel(op.join(beh_dir, 'BAZA_DANYCH.xlsx'))
         if full_table:
@@ -97,6 +98,21 @@ def read_bdi(paths, study='C', **kwargs):
             bdi = df[['ID', 'BDI-II', 'DIAGNOZA']]
 
         bdi = make_sure_diagnosis_is_boolean(bdi)
+
+    if study == 'D':
+        beh_dir = op.join(base_dir, 'beh')
+        bdi = pd.read_excel(op.join(beh_dir, 'subject_data.xlsx'))
+        if full_table:
+            sel_col = ['id','MDD', 'sex', 'age', 'BDI'] # czy są potrzebne jeszcze inne kolumny?
+            sel_col = [col for col in sel_col if col in bdi.columns]
+            bdi = bdi[sel_col]
+        else:
+            sel_col = ['id','MDD', 'BDI']
+            sel_col = [col for col in sel_col if col in bdi.columns]
+            bdi = bdi[sel_col]
+
+        rename_col = {'id': 'ID'}
+        bdi = bdi.rename(columns=rename_col)
 
     return bdi.set_index('ID')
 
@@ -108,7 +124,8 @@ def study_C_reformat_original_beh_table(df):
     '''
     # select relevant columns
     df = df[['ID', 'DATA BADANIA', 'WIEK', 'PŁEĆ', 'WYKSZTAŁCENIE',
-             'DIAGNOZA', 'BDI-II']]
+         'DIAGNOZA', 'BDI-II']]
+
     # fix dates
     df.loc[0, 'DATA BADANIA'] = df.loc[1, 'DATA BADANIA']
     df.loc[7, 'WIEK'] = datetime.datetime(df.loc[7, 'WIEK'], 6, 25)
