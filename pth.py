@@ -156,7 +156,7 @@ def set_paths(base_dir=None):
                                 cache=True)
             paths.register_data('neighbours', load_neighbours, study=study)
             paths.register_data('info', load_info, study=study, cache=True)
-            paths.register_data('bdi', read_bdi, study=study, cache=True)
+            paths.register_data('bdi', read_bdi, study=study, cache=False)
             paths.register_data('psd', load_psd, study=study, cache=False)
             paths.register_data('fwd', load_forward, study=study)
 
