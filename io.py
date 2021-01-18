@@ -99,18 +99,19 @@ def read_bdi(paths, study='C', **kwargs):
         bdi = make_sure_diagnosis_is_boolean(bdi)
 
     if study == 'D':
-        beh_dir = op.join(base_dir, 'beh')
         bdi = pd.read_excel(op.join(beh_dir, 'subject_data.xlsx'))
-        if full_table:
-            sel_col = ['id','MDD', 'sex', 'age', 'BDI'] # czy są potrzebne jeszcze inne kolumny?
-            sel_col = [col for col in sel_col if col in bdi.columns]
-            bdi = bdi[sel_col]
-        else:
-            sel_col = ['id','MDD', 'BDI']
-            sel_col = [col for col in sel_col if col in bdi.columns]
-            bdi = bdi[sel_col]
+        bdi.loc[:, 'DIAGNOZA'] = bdi.MDD <= 2
+        sel_col = ['id', 'DIAGNOZA', 'BDI']
 
-        rename_col = {'id': 'ID'}
+        if full_table:
+            # translate MDD values to more meaningful strings
+            translate = {1: 'present', 2: 'past', 50: 'subclinical', 99: 'no'}
+            bdi.loc[:, 'depression'] = [translate[val] for val in bdi.MDD]
+
+            sel_col = sel_col + ['depression', 'sex', 'age']
+
+        bdi = bdi[sel_col]
+        rename_col = {'id': 'ID', 'BDI': 'BDI-II'}
         bdi = bdi.rename(columns=rename_col)
 
     return bdi.set_index('ID')

@@ -30,6 +30,13 @@ def group_bdi(subj_id, bdi, method='cvsc', lower_threshold=None,
 
     Parameters
     ----------
+    subj_id : listlike of int
+        Identifiers of the subjects to choose. Some subjects are rejected
+        so we want to select a subsample of all subjects.
+    bdi : pandas DataFrame
+        Dataframe with columns specifying BDI (either ``BDI-I`` or ``BDI-II``)
+        and diagnosis status (``DIAGNOZA`` - boolean). The rows should be
+        indexed with subject identifiers.
     method : string
         There are five possible methods available:
         * 'cvsc'  - contrast high and low-BDI controls
