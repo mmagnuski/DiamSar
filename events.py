@@ -52,7 +52,7 @@ def translate_events_D(events):
     return np.stack(close_events, axis=0)
 
 
-# TODO - change name, fix suggests
+# TODO - change name, fix suggests repairing, not fixation
 def fix_epochs(raw, events, tmin=-0.2, tmax=0.5):
     '''Create fixation-centered epochs.
 

@@ -6,7 +6,6 @@ from scipy import sparse
 
 from borsar.cluster import construct_adjacency_matrix
 
-from . import io
 from . import pth
 from . import utils
 from .freq import format_psds, get_psds
@@ -200,8 +199,9 @@ def run_analysis(study='C', contrast='cvsd', eyes='closed', space='avg',
                 alpha_threshold=cluster_p_threshold)
 
         # construct Clusters with stat_info in description
-        return _construct_clusters(clusters, pval, stat, space, stat_info, info,
-                                   src, subjects_dir, subject, ch_names, freq)
+        return _construct_clusters(clusters, pval, stat, space, stat_info,
+                                   info, src, subjects_dir, subject,
+                                   ch_names, freq)
     else:
         # for selected pairs (two channel pairs) we don't correct for
         # multiple comparisons:
@@ -371,7 +371,6 @@ def summarize_ch_pair_stats(reduce_columns=True, stat_dir='stats',
 
             if 'vs' in contrast:
                 psd_high, psd_low, ch_names = loaded
-                nx, ny = psd_high.shape[0], psd_low.shape[0]
                 esci = esci_indep_cohens_d(psd_high[:, ch_idx],
                                            psd_low[:, ch_idx])
             else:
@@ -386,7 +385,6 @@ def summarize_ch_pair_stats(reduce_columns=True, stat_dir='stats',
 
     # split into two dfs
     pair_rows = df['selection'].str.contains('pairs').values
-    pair_rows = pair_rows == True
     df = df.loc[pair_rows, :].reset_index(drop=True)
 
     df = remove_columns_with_no_variability(df)
@@ -642,7 +640,7 @@ def _get_adjacency(study, space, ch_names, selection, src):
 
 
 def _construct_clusters(clusters, pval, stat, space, stat_info, info,
-                       src, subjects_dir, subject, ch_names, freq):
+                        src, subjects_dir, subject, ch_names, freq):
     '''Construct Clusters object out of cluster-based test results.'''
     from borsar.cluster import Clusters
 

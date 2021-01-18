@@ -72,7 +72,6 @@ def read_bdi(paths, study='C', **kwargs):
             bdi.loc[:, 'sex'] = bdi.sex.replace(relabel)
 
     if study == 'B':
-        beh_dir = op.join(base_dir, 'beh')
         if full_table:
             bdi = pd.read_excel(op.join(beh_dir, 'BAZA DANYCH.xlsx'))
             sel_col = ['BDI 2-pomiar wynik', 'wykształcenie', 'wiek', 'płeć']
@@ -124,7 +123,7 @@ def study_C_reformat_original_beh_table(df):
     '''
     # select relevant columns
     df = df[['ID', 'DATA BADANIA', 'WIEK', 'PŁEĆ', 'WYKSZTAŁCENIE',
-         'DIAGNOZA', 'BDI-II']]
+             'DIAGNOZA', 'BDI-II']]
 
     # fix dates
     df.loc[0, 'DATA BADANIA'] = df.loc[1, 'DATA BADANIA']
