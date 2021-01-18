@@ -15,13 +15,31 @@ global files_id_mode
 files = dict()
 paths = Paths()
 
-# - [?] create a diagram with study paths
-
 
 # study C
 # -------
 def set_paths(base_dir=None):
-    '''Setup study paths.'''
+    '''Setup study paths. Creates a borsar Paths object that allows other
+    functions to work for all registered studies.
+
+    Parameters
+    ----------
+    base_dir : str
+        Base directory - that is a directory on your computer that contains
+        all study subfolders. See the github documentation to see what files
+        are necessary for studies to be included in specific analyses or how
+        to add additional studies.
+
+    Returns
+    -------
+    paths : borsar.project.Paths
+        Paths object containing information on folders and data-reading
+        functions. Allows to get paths for specific study folders (for
+        example ``paths.get_path('eeg', study='C', task='rest')``) or
+        to read files like behavioral data
+        (``paths.get_data('bdi', study='C')``) or precomputed spectra
+        (``paths.get_data('psd', study='B')``).
+    '''
     global paths
     global files
     global files_id_mode
@@ -31,6 +49,8 @@ def set_paths(base_dir=None):
 
     if base_dir is not None:
         paths.add_path('base', base_dir, relative_to=False)
+    else:
+        raise ValueError('You have to specify base directory')
 
     # study C
     # -------
@@ -49,7 +69,8 @@ def set_paths(base_dir=None):
         translate = dict(rest='baseline', linord='linord',
                          sternberg='sternberg')
         for task in ['rest', 'sternberg']:
-            task_eeg_dir = op.join('resampled set', translate[task] + '_clean_exported')
+            task_eeg_dir = op.join('resampled set', translate[task]
+                                   + '_clean_exported')
             paths.add_path('eeg', task_eeg_dir, study='C', task=task,
                            relative_to='eeg', validate=False)
 
@@ -145,6 +166,7 @@ def set_paths(base_dir=None):
 
 
 def scan_files(study='C', task='rest'):
+    '''Refresh the list of files for given study / task eeg directory.'''
     global files
     task_dir = paths.get_path('eeg', study=study, task=task)
 
@@ -223,6 +245,7 @@ def get_subject_ids(study='C', task='rest', full_names=False):
 
 
 try:
+    # automatic path setup for computers we frequently used
     dropbox_dir = find_dropbox()
     if len(dropbox_dir) > 0:
         candidate_paths = [op.join(dropbox_dir, p)

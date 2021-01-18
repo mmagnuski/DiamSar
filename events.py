@@ -2,6 +2,18 @@ import numpy as np
 
 
 def get_task_event_id(raw, event_id, study='C', task='rest'):
+    '''Returns trigger mapping specific to given study and task.
+
+    Parameters
+    ----------
+    raw : mne Raw
+        Data file. Used only in study C, sternberg task, when annotations
+        are checked.
+    event_id : dict
+        Starting event_id dictionary that is filled with additional entries.
+    study : FILLME
+    task : FILLME
+    '''
     if task == 'rest':
         if study == 'C':
             event_id.update({'S 10': 10, 'S 11': 11})
@@ -26,7 +38,8 @@ def get_task_event_id(raw, event_id, study='C', task='rest'):
 
 def translate_events_D(events):
     '''Translate PREDiCT triggers to a sane format where they signal event
-    onset.'''
+    onset (by default events are sent periodically as long as given event,
+    for example eyes closed, lasts).'''
     close_events = list()
     types = [[1, 3, 5], [2, 4, 6]]
     translate_to = [11, 10]
@@ -39,6 +52,7 @@ def translate_events_D(events):
     return np.stack(close_events, axis=0)
 
 
+# TODO - change name, fix suggests
 def fix_epochs(raw, events, tmin=-0.2, tmax=0.5):
     '''Create fixation-centered epochs.
 
@@ -62,6 +76,7 @@ def fix_epochs(raw, events, tmin=-0.2, tmax=0.5):
 
     This function is not used in "Three times NO" paper.
     '''
+    import mne
     event_types = np.unique(events[:, -1])
     fix_types = event_types[(event_types > 99) & (event_types < 111)]
     event_id = {'load{}'.format(tp - 100): tp for tp in fix_types}
@@ -98,7 +113,6 @@ def change_events_sternberg(events):
     where_20 = np.where(events[:, -1] == 20)[0]
     new_events[where_20, -1] = 10
 
-
     num_digits = list()
     for start_idx in trial_start_fix:
         idx = start_idx + 1
@@ -118,12 +132,12 @@ def change_events_sternberg(events):
     if not equal_len:
         from warnings import warn
         warn('Something may be wrong with this file - sternberg event'
-            ' structure is perturbed. Number of maintenance fixes: '
-            '{}, number of start fixes: {}, number of digit streams: '
-            '{}.'.format(n_fix_maint, n_fix_start, len(num_digits)))
+             ' structure is perturbed. Number of maintenance fixes: '
+             '{}, number of start fixes: {}, number of digit streams: '
+             '{}.'.format(n_fix_maint, n_fix_start, len(num_digits)))
         min_ind = min(n_fix_maint, n_fix_start, len(num_digits))
         where_fix = where_fix[:min_ind * 2]
-        is_maintenance_fix = is_maintenance_fix[:min_ind  * 2]
+        is_maintenance_fix = is_maintenance_fix[:min_ind * 2]
         num_digits = num_digits[:min_ind]
     num_digits = np.array(num_digits)
 
@@ -132,7 +146,7 @@ def change_events_sternberg(events):
 
     # add load info to probe
     new_events[where_probe, -1] = (num_digits * 10 +
-        new_events[where_probe, -1] - 10)
+                                   new_events[where_probe, -1] - 10)
 
     return new_events
 
