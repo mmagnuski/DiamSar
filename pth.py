@@ -109,7 +109,7 @@ def set_paths(base_dir=None):
     # study D
     # -------
     paths.register_study('D', tasks=['rest'])
-    study_D_path = Path(base_dir, 'PREDiCT (do 3xNO)')
+    study_D_path = Path(base_dir, 'PREDiCT')
     has_D = study_D_path.exists()
 
     if has_D:
