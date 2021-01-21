@@ -62,6 +62,8 @@ def read_raw(fname, study='C', task='rest', space='avg'):
     data_path = pth.paths.get_path('eeg', study=study, task=task)
     set_file, rej_file = get_file(fname, study=study, task=task)
 
+    # read file
+    # ---------
     # read eeglab file, ignoring some expected warnings
     with warnings.catch_warnings():
         for msg in warnings_to_ignore_when_reading_files():
@@ -91,11 +93,6 @@ def read_raw(fname, study='C', task='rest', space='avg'):
     if study == 'D':
         from DiamSar.events import translate_events_D
         events = translate_events_D(events)
-
-    # drop stim channel and 'oko' channel if present
-    drop_chan = [ch for ch in raw.ch_names
-                 if 'STI' in ch or ch in ['oko', 'HEOG', 'VEOG']]
-    raw.drop_channels(drop_chan)
 
     # FIXME: in 0.17 / 0.18 -> boundary annotations should be already present,
     #        check if this is needed
@@ -134,8 +131,14 @@ def read_raw(fname, study='C', task='rest', space='avg'):
 
     # channel position, reference scheme
     # ----------------------------------
+
+    # drop stim channel and 'oko' channel if present
+    drop_chan = [ch for ch in raw.ch_names
+                 if 'STI' in ch or ch in ['oko', 'HEOG', 'VEOG']]
+    raw.drop_channels(drop_chan)
+
+    # add original reference channel (Cz) in study C
     if study == 'C':
-        # add original reference channel (Cz)
         with silent_mne():
             mne.add_reference_channels(raw, 'Cz', copy=False)
             maxpos = get_ch_pos(raw).max()

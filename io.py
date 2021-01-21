@@ -72,7 +72,6 @@ def read_bdi(paths, study='C', **kwargs):
             bdi.loc[:, 'sex'] = bdi.sex.replace(relabel)
 
     if study == 'B':
-        beh_dir = op.join(base_dir, 'beh')
         if full_table:
             bdi = pd.read_excel(op.join(beh_dir, 'BAZA DANYCH.xlsx'))
             sel_col = ['BDI 2-pomiar wynik', 'wykształcenie', 'wiek', 'płeć']
@@ -100,18 +99,23 @@ def read_bdi(paths, study='C', **kwargs):
         bdi = make_sure_diagnosis_is_boolean(bdi)
 
     if study == 'D':
-        beh_dir = op.join(base_dir, 'beh')
         bdi = pd.read_excel(op.join(beh_dir, 'subject_data.xlsx'))
-        if full_table:
-            sel_col = ['id','MDD', 'sex', 'age', 'BDI'] # czy są potrzebne jeszcze inne kolumny?
-            sel_col = [col for col in sel_col if col in bdi.columns]
-            bdi = bdi[sel_col]
-        else:
-            sel_col = ['id','MDD', 'BDI']
-            sel_col = [col for col in sel_col if col in bdi.columns]
-            bdi = bdi[sel_col]
+        bdi.loc[:, 'DIAGNOZA'] = bdi.MDD <= 2
+        sel_col = ['id', 'DIAGNOZA', 'BDI']
 
-        rename_col = {'id': 'ID'}
+        if full_table:
+            # translate MDD values to more meaningful strings
+            translate = {1: 'present', 2: 'past', 50: 'subclinical', 99: 'no'}
+            bdi.loc[:, 'depression'] = bdi.MDD.replace(translate)
+
+            # translate sex to female/male strings
+            relabel = {1: 'female', 2: 'male'}
+            bdi.loc[:, 'sex'] = bdi.sex.replace(relabel)
+
+            sel_col = sel_col + ['depression', 'sex', 'age']
+
+        bdi = bdi[sel_col]
+        rename_col = {'id': 'ID', 'BDI': 'BDI-II'}
         bdi = bdi.rename(columns=rename_col)
 
     return bdi.set_index('ID')
@@ -124,7 +128,7 @@ def study_C_reformat_original_beh_table(df):
     '''
     # select relevant columns
     df = df[['ID', 'DATA BADANIA', 'WIEK', 'PŁEĆ', 'WYKSZTAŁCENIE',
-         'DIAGNOZA', 'BDI-II']]
+             'DIAGNOZA', 'BDI-II']]
 
     # fix dates
     df.loc[0, 'DATA BADANIA'] = df.loc[1, 'DATA BADANIA']

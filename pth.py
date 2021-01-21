@@ -15,13 +15,31 @@ global files_id_mode
 files = dict()
 paths = Paths()
 
-# - [?] create a diagram with study paths
-
 
 # study C
 # -------
 def set_paths(base_dir=None):
-    '''Setup study paths.'''
+    '''Setup study paths. Creates a borsar Paths object that allows other
+    functions to work for all registered studies.
+
+    Parameters
+    ----------
+    base_dir : str
+        Base directory - that is a directory on your computer that contains
+        all study subfolders. See the github documentation to see what files
+        are necessary for studies to be included in specific analyses or how
+        to add additional studies.
+
+    Returns
+    -------
+    paths : borsar.project.Paths
+        Paths object containing information on folders and data-reading
+        functions. Allows to get paths for specific study folders (for
+        example ``paths.get_path('eeg', study='C', task='rest')``) or
+        to read files like behavioral data
+        (``paths.get_data('bdi', study='C')``) or precomputed spectra
+        (``paths.get_data('psd', study='B')``).
+    '''
     global paths
     global files
     global files_id_mode
@@ -31,11 +49,15 @@ def set_paths(base_dir=None):
 
     if base_dir is not None:
         paths.add_path('base', base_dir, relative_to=False)
+    else:
+        raise ValueError('You have to specify base directory')
 
     # study C
     # -------
-    has_C = (paths.get_path('base', as_str=False) / 'DiamSar').exists()
-    if has_C:
+    has_study = dict()
+    has_study['C'] = (paths.get_path('base', as_str=False)
+                      / 'DiamSar').exists()
+    if has_study['C']:
         paths.add_path('main', 'DiamSar', relative_to='base')
         paths.add_path('fig', 'fig', validate=False)
         paths.add_path('eeg', 'eeg')
@@ -49,61 +71,34 @@ def set_paths(base_dir=None):
         translate = dict(rest='baseline', linord='linord',
                          sternberg='sternberg')
         for task in ['rest', 'sternberg']:
-            task_eeg_dir = op.join('resampled set', translate[task] + '_clean_exported')
+            task_eeg_dir = op.join('resampled set', translate[task]
+                                   + '_clean_exported')
             paths.add_path('eeg', task_eeg_dir, study='C', task=task,
                            relative_to='eeg', validate=False)
 
-    # study B
-    # -------
+    # study A, B, D & E
+    # -----------------
     base_dir = paths.get_path('base')
-    paths.register_study('B', tasks=['rest', 'linord'])
-    study_B_path = Path(base_dir, 'Wronski')
-    has_B = study_B_path.exists()
+    study_dirs = ['Nowowiejska', 'Wronski', 'PREDiCT', 'MODMA']
+    prefixes = ['baseline', 'baseline', 'rest', 'baseline']
 
-    if has_B:
-        paths.add_path('main', study_B_path, study='B')
-        paths.add_path('eeg', 'eeg', study='B')
-        paths.add_path('src', 'src', study='B', relative_to='eeg')
+    for study, study_dir, prefix in zip(list('ADE'), study_dirs, prefixes):
+        paths.register_study(study, tasks=['rest'])
+        this_study_path = Path(base_dir, study_dir)
+        has_study[study] = this_study_path.exists()
 
-        # task-specific
-        for task in ['rest']:
-            paths.add_path('eeg', translate[task] + '_clean_exported',
-                           study='B', task=task, relative_to='eeg',
-                           validate=False)
+        if has_study[study]:
+            paths.add_path('main', this_study_path, study=study)
+            paths.add_path('eeg', 'eeg', study=study)
+            paths.add_path('src', 'src', study=study, relative_to='eeg')
 
-    # study A
-    # -------
-    paths.register_study('A', tasks=['rest'])
-    study_A_path = Path(base_dir, 'Nowowiejska')
-    has_A = study_A_path.exists()
+            # task-specific
+            paths.add_path('eeg', prefix + '_clean_exported', study=study,
+                           task='rest', relative_to='eeg', validate=False)
 
-    if has_A:
-        paths.add_path('main', study_A_path, study='A')
-        paths.add_path('eeg', 'eeg', study='A')
-        paths.add_path('src', 'src', study='A', relative_to='eeg')
-
-        paths.add_path('eeg', translate['rest'] + '_clean_exported', study='A',
-                       task='rest', relative_to='eeg', validate=False)
-
-    # study D
-    # -------
-    paths.register_study('D', tasks=['rest'])
-    study_D_path = Path(base_dir, 'PREDiCT (do 3xNO)')
-    has_D = study_D_path.exists()
-
-    if has_D:
-        paths.add_path('main', study_D_path, study='D')
-        paths.add_path('eeg', 'eeg', study='D')
-        paths.add_path('src', 'src', study='D', relative_to='eeg')
-
-        # task-specific
-        paths.add_path('eeg', 'rest_clean_exported', study='D',
-                       task='rest', relative_to='eeg', validate=False)
-
-    # chanpos for all studies
-    for study, has_study in zip(['A', 'B', 'C', 'D'],
-                                [has_A, has_B, has_C, has_D]):
-        if has_study:
+    # channel position for all studies
+    for study in paths.studies:
+        if has_study[study]:
             paths.add_path('chanpos', 'chanpos', study=study,
                            relative_to='eeg', validate=False)
 
@@ -111,16 +106,15 @@ def set_paths(base_dir=None):
     # -------------
     # getting files is not yet supported in borsar.Paths so we write a few
     # functions for that
-    files_id_mode = dict(A='anon', B='num', C='num', D='num')
+    files_id_mode = dict(A='anon', B='num', C='num', D='num', E='anon')
 
     for study in paths.studies:
         files[study] = dict()
         for task in paths.tasks[study]:
             files[study][task] = list()
 
-    # check files
-    for study, has_study in zip(list('ABCD'), [has_A, has_B, has_C, has_D]):
-        if has_study:
+        # scan data files if study is present
+        if has_study[study]:
             scan_files(study=study)
 
     # register data
@@ -128,14 +122,14 @@ def set_paths(base_dir=None):
     from .io import (load_GH, load_chanord, load_neighbours, load_info,
                      load_forward, load_src_sym, read_bdi, load_psd)
 
-    for study, has_study in zip(list('ABCD'), [has_A, has_B, has_C, has_D]):
-        if has_study:
+    for study in paths.studies:
+        if has_study[study]:
             paths.register_data('GH', load_GH, study=study, cache=True)
             paths.register_data('chanord', load_chanord, study=study,
                                 cache=True)
             paths.register_data('neighbours', load_neighbours, study=study)
             paths.register_data('info', load_info, study=study, cache=True)
-            paths.register_data('bdi', read_bdi, study=study, cache=True)
+            paths.register_data('bdi', read_bdi, study=study, cache=False)
             paths.register_data('psd', load_psd, study=study, cache=False)
             paths.register_data('fwd', load_forward, study=study)
 
@@ -145,6 +139,7 @@ def set_paths(base_dir=None):
 
 
 def scan_files(study='C', task='rest'):
+    '''Refresh the list of files for given study / task eeg directory.'''
     global files
     task_dir = paths.get_path('eeg', study=study, task=task)
 
@@ -223,6 +218,7 @@ def get_subject_ids(study='C', task='rest', full_names=False):
 
 
 try:
+    # automatic path setup for computers we frequently used
     dropbox_dir = find_dropbox()
     if len(dropbox_dir) > 0:
         candidate_paths = [op.join(dropbox_dir, p)
