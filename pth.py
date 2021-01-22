@@ -82,7 +82,7 @@ def set_paths(base_dir=None):
     study_dirs = ['Nowowiejska', 'Wronski', 'PREDiCT', 'MODMA']
     prefixes = ['baseline', 'baseline', 'rest', 'baseline']
 
-    for study, study_dir, prefix in zip(list('ADE'), study_dirs, prefixes):
+    for study, study_dir, prefix in zip(list('ABDE'), study_dirs, prefixes):
         paths.register_study(study, tasks=['rest'])
         this_study_path = Path(base_dir, study_dir)
         has_study[study] = this_study_path.exists()
