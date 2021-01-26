@@ -133,8 +133,9 @@ def read_raw(fname, study='C', task='rest', space='avg'):
     # ----------------------------------
 
     # drop stim channel and 'oko' channel if present
+    drop_ch_names = ['oko', 'HEOG', 'VEOG', 'EKG', 'CB1', 'CB2']
     drop_chan = [ch for ch in raw.ch_names
-                 if 'STI' in ch or ch in ['oko', 'HEOG', 'VEOG']]
+                 if 'STI' in ch or ch in drop_ch_names]
     raw.drop_channels(drop_chan)
 
     # add original reference channel (Cz) in study C
@@ -148,6 +149,19 @@ def read_raw(fname, study='C', task='rest', space='avg'):
     chan_ord = pth.paths.get_data('chanord', study=study)
     if not (np.array(chan_ord) == np.array(raw.ch_names)).all():
         raw.reorder_channels(chan_ord)
+
+    # rename 'CZ' to 'Cz' etc. in study D
+    if study == 'D':
+        rename = dict()
+        for ch in raw.ch_names:
+            ch2 = ch
+            if 'Z' in ch2:
+                ch2 = ch2.replace('Z', 'z')
+            if 'FP' in ch2:
+                ch2 = ch2.replace('FP', 'Fp')
+            if not ch == ch2:
+                rename[ch] = ch2
+        raw.rename_channels(rename)
 
     # rereference to average or apply CSD
     if space == 'avg':
