@@ -3,10 +3,11 @@ import numpy as np
 import mne
 
 from borsar.utils import find_range
-from borsar.channels import select_channels, get_ch_names, find_channels
+from borsar.channels import get_ch_names
 from borsar.freq import compute_rest_psd
 
 from . import pth
+from .utils import select_channels_special
 from .utils import progressbar as progbar
 
 
@@ -147,35 +148,6 @@ def format_psds(psds, freq, freq_range=(8, 13), average_freq=False,
                 / psds.std(axis=dims, keepdims=True))
 
     return psds, freq, ch_names
-
-
-def select_channels_special(info, selection):
-    '''Handles special case of 'asy_pairs' channel selection, otherwise uses
-    ``borsar.select_channels``.'''
-
-    if not selection == 'asy_pairs':
-        # normal borsar selection
-        selection = select_channels(info, selection)
-    else:
-        # special DiamSar case of left-right symmetric pairs
-        pairs = dict(left=['F3', 'F7'], right=['F4', 'F8'])
-        selection = {k: find_channels(info, pairs[k]) for k in pairs.keys()}
-        if any(idx is None for idx in selection['left'] + selection['right']):
-            # 10-20 names not found, try EGI channels
-            pairs = {'left': ['E12', 'E18'], 'right': ['E60', 'E58']}
-            selection = {k: find_channels(info, pairs[k])
-                         for k in pairs.keys()}
-
-        # check if any channels are missing
-        ch_list = selection['left'] + selection['right']
-        channel_not_found = [idx is None for idx in ch_list]
-        if any(channel_not_found):
-            pairs_list = pairs['left'] + pairs['right']
-            not_found = [ch for idx, ch in enumerate(pairs_list)
-                         if channel_not_found[idx]]
-            msg = 'The following channels were not found: {}.'
-            raise ValueError(msg.format(', '.join(not_found)))
-    return selection
 
 
 def save_psd(fname, psd, freq, ch_names, subject_id):

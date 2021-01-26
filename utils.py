@@ -206,3 +206,162 @@ def psd_to_df(data1, data2):
     labels = ['diagnosed'] * nx + ['controls'] * ny
     df = pd.DataFrame(data={'FAA': data, 'group': labels})
     return df
+
+
+def select_channels_special(info, selection):
+    '''Handles special case of 'asy_pairs' channel selection, otherwise uses
+    ``borsar.select_channels``.'''
+    from borsar.channels import find_channels
+
+    if not selection == 'asy_pairs':
+        # normal borsar selection
+        selection = select_channels(info, selection)
+    else:
+        # special DiamSar case of left-right symmetric pairs
+        pairs = dict(left=['F3', 'F7'], right=['F4', 'F8'])
+        selection = {k: find_channels(info, pairs[k]) for k in pairs.keys()}
+
+        if any(idx is None for idx in selection['left'] + selection['right']):
+            # 10-20 names not found, try EGI channels
+            if 'E128' in info['ch_names']:
+                # 128 EGI cap (MODMA)
+                pairs = {'left': ['E24', 'E33'], 'right': ['E124', 'E122']}
+            else:
+                # 64 EGI cap (Nowowiejska)
+                pairs = {'left': ['E12', 'E18'], 'right': ['E60', 'E58']}
+            selection = {k: find_channels(info, pairs[k])
+                         for k in pairs.keys()}
+
+        # check if any channels are missing
+        ch_list = selection['left'] + selection['right']
+        channel_not_found = [idx is None for idx in ch_list]
+        if any(channel_not_found):
+            pairs_list = pairs['left'] + pairs['right']
+            not_found = [ch for idx, ch in enumerate(pairs_list)
+                         if channel_not_found[idx]]
+            msg = 'The following channels were not found: {}.'
+            raise ValueError(msg.format(', '.join(not_found)))
+    return selection
+
+
+def select_channels(inst, select='all'):
+    '''
+    Gives indices of channels selected by a text keyword.
+
+    Parameters
+    ----------
+    inst : mne Raw | mne Epochs | mne Evoked | mne TFR | mne Info
+        Mne object with `ch_names` and `info` attributes or just the mne Info
+        object.
+    select : str
+        Can be 'all' or 'frontal'. If 'asy_' is prepended to the
+        select string then selected channels are grouped by mirror positions
+        on the x axis (left vs right).
+
+    Returns
+    -------
+    selection : numpy int array or dict of numpy int arrays
+        Indices of the selected channels. If 'asy_' was in the select string
+        then selection is a dictionary of indices, where selection['left']
+        gives channels on the left side of the scalp and selection['right']
+        gives right-side homologues of the channels in selection['left'].
+    '''
+    from borsar.channels import get_ch_pos, get_ch_names
+
+    if select == 'all':
+        return np.arange(len(get_ch_names(inst)))
+    elif 'asy' in select and 'all' in select:
+        return homologous_pairs(inst)
+
+    if 'frontal' in select:
+        # compute radius as median distance to head center: the (0, 0, 0) point
+        ch_pos = get_ch_pos(inst)
+        dist = np.linalg.norm(ch_pos - np.array([[0, 0, 0]]), axis=1)
+        median_dist = np.median(dist)
+        frontal = ch_pos[:, 1] > 0.1 * median_dist
+        not_too_low = ch_pos[:, 2] > -0.6 * median_dist
+        frontal_idx = np.where(frontal & not_too_low)[0]
+        if 'asy' in select:
+            hmlg = homologous_pairs(inst)
+            sel = np.in1d(hmlg['left'], frontal_idx)
+            return {side: hmlg[side][sel] for side in ['left', 'right']}
+        else:
+            return frontal_idx
+
+
+def homologous_pairs(inst):
+    '''
+    Construct homologous channel pairs based on channel names or positions.
+
+    Parameters
+    ----------
+    inst : mne object instance
+        Mne object like mne.Raw or mne.Epochs.
+
+    Returns
+    -------
+    selection: dict of {str -> list of int} mappings
+        Dictionary mapping hemisphere ('left' or 'right') to array of channel
+        indices.
+    '''
+    from borsar.channels import get_ch_pos, get_ch_names
+
+    ch_names = get_ch_names(inst)
+    ch_pos = get_ch_pos(inst)
+
+    labels = ['right', 'left']
+    selection = {label: list() for label in labels}
+    has_1020_names = 'Cz' in ch_names and 'F3' in ch_names
+
+    if has_1020_names:
+        # find homologues by channel names
+        left_chans = ch_pos[:, 0] < 0
+        y_ord = np.argsort(ch_pos[left_chans, 1])[::-1]
+        check_chans = [ch for ch in list(np.array(ch_names)[left_chans][y_ord])
+                       if 'z' not in ch]
+
+        for ch in check_chans:
+            chan_base = ''.join([char for char in ch if not char.isdigit()])
+            chan_value = int(''.join([char for char in ch if char.isdigit()]))
+
+            if (chan_value % 2) == 1:
+                # sometimes homologous channels are missing in the cap
+                homologous_ch = chan_base + str(chan_value + 1)
+                if homologous_ch in ch_names:
+                    selection['left'].append(ch_names.index(ch))
+                    selection['right'].append(ch_names.index(homologous_ch))
+    else:
+        # channel names do not come from 10-20 system
+        # constructing homologues from channel position
+        # (this will not work well for digitized channel positions)
+        from mne.bem import _fit_sphere
+
+        # fit sphere to channel positions and calculate median distance
+        # of the channels to the sphere origin
+        radius, origin = _fit_sphere(ch_pos)
+        origin_distance = ch_pos - origin[np.newaxis, :]
+        dist = np.linalg.norm(origin_distance, axis=1)
+        median_dist = np.median(dist)
+
+        # find channels on the left from sphere origin
+        left_x_val = origin[0] - median_dist * 0.05
+        sel = ch_pos[:, 0] < left_x_val
+        left_chans = ch_pos[sel, :]
+        sel_idx = np.where(sel)[0]
+
+        for idx, pos in enumerate(left_chans):
+            # represent channel position with respect to the origin
+            this_distance = pos - origin
+
+            # find similar origin-relative position on the right side
+            this_distance[0] *= -1
+            this_simil = origin_distance - this_distance[np.newaxis, :]
+            similar = np.linalg.norm(this_simil, axis=1).argmin()
+
+            # fill selection dictionary
+            selection['left'].append(sel_idx[idx])
+            selection['right'].append(similar)
+
+    selection['left'] = np.array(selection['left'])
+    selection['right'] = np.array(selection['right'])
+    return selection
