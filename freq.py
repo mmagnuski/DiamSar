@@ -194,11 +194,24 @@ def compute_all_rest(study='C', event_id=None, tmin=1., tmax=60., winlen=2.,
     Parameters
     ----------
     study : str
-        Study to use.
+        Which study to use. Studies are coded with letters in the following
+        fashion:
+
+        =====   ============   ===============
+        study   study letter   study directory
+        =====   ============   ===============
+        I       A              Nowowiejska
+        II      B              Wronski
+        III     C              DiamSar
+        IV      D              PREDiCT
+        V       E              MODMA
+        =====   ============   ===============
+
+        Study ``'C'`` is used by default.
     event_id : int | None
         Event id that starts periods of signal to compute psd for.
-        This is only relevant in study C, where both eyes closed (event_id: 11)
-        and eyes open (event_id: 10) segments are available.
+        This is only relevant in study C and D where both eyes closed
+        (event_id: 11) and eyes open (event_id: 10) segments are available.
     tmin : float
         Start of the signal to consider. If event_id is None the tmin is with
         respect of the signal start, else it is with respect to each event

@@ -30,14 +30,17 @@ def read_bdi(paths, study='C', **kwargs):
         Which study to use. Studies are coded with letters in the following
         fashion:
 
-        =====   ============   ============
-        study   study letter   study name
-        =====   ============   ============
+        =====   ============   ===============
+        study   study letter   study directory
+        =====   ============   ===============
         I       A              Nowowiejska
         II      B              Wronski
         III     C              DiamSar
-        =====   ============   ============
+        IV      D              PREDiCT
+        V       E              MODMA
+        =====   ============   ===============
 
+        Study ``'C'`` is used by default.
     full_table : bool
         Whether to read full table, containing for example age and sex.
         This option is not used in "Three times NO" paper.

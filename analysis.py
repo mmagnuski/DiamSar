@@ -23,13 +23,15 @@ def run_analysis(study='C', contrast='cvsd', eyes='closed', space='avg',
         Which study to use. Studies are coded with letters in the following
         fashion:
 
-        =====   ============   ============
-        study   study letter   study name
-        =====   ============   ============
+        =====   ============   ===============
+        study   study letter   study directory
+        =====   ============   ===============
         I       A              Nowowiejska
         II      B              Wronski
         III     C              DiamSar
-        =====   ============   ============
+        IV      D              PREDiCT
+        V       E              MODMA
+        =====   ============   ===============
 
         Study ``'C'`` is used by default.
     contrast : str
@@ -187,10 +189,14 @@ def run_analysis(study='C', contrast='cvsd', eyes='closed', space='avg',
             threshold = t.ppf(1 - cluster_p_threshold / 2, df)
 
             # run cluster-based permutation test
-            stat, clusters, pval, _ = permutation_cluster_test(
-                [hi, lo], threshold=threshold, n_permutations=n_permutations,
-                stat_fun=ttest_ind_no_p, connectivity=adjacency,
-                verbose=verbose)
+            args = dict(threshold=threshold, n_permutations=n_permutations,
+                        stat_fun=ttest_ind_no_p, verbose=verbose)
+            try:
+                stat, clusters, pval, _ = permutation_cluster_test(
+                    [hi, lo], **args, connectivity=adjacency)
+            except TypeError:
+                stat, clusters, pval, _ = permutation_cluster_test(
+                    [hi, lo], **args, adjacency=adjacency)
         else:
             # regression in cluster-based permutation test
             from borsar.cluster import cluster_based_regression
@@ -525,7 +531,8 @@ def list_analyses(study=list('ABC'), contrast=['cvsc', 'cvsd', 'creg', 'cdreg',
 
     good_analyses = list()
     for std, cntr, eye, spc, frqrng, avgfrq, sel, trnsf in prod:
-        # only wide frequency range is not averarged
+        # averaging alpha frequency range is ommited only for wide frequency
+        # range
         if not avgfrq and not frqrng == (8, 13):
             continue
 
@@ -544,14 +551,17 @@ def list_analyses(study=list('ABC'), contrast=['cvsc', 'cvsd', 'creg', 'cdreg',
         # non availability
         # ----------------
 
-        # only study C has segments with open eyes
-        if not std == 'C' and eye == 'open':
+        # only studies C and D contain segments with open eyes
+        if std not in ['C', 'D'] and eye == 'open':
             continue
         # study B does not have a diagnosed group
         if std == 'B' and cntr in ['cdreg', 'cvsd', 'dreg']:
             continue
         # study A has controls only with low BDI
         if std == 'A' and cntr in ['cvsc', 'creg', 'cdreg']:
+            continue
+        # study E did not measure BDI
+        if std == 'E' and not cntr == 'cvsd':
             continue
 
         # else: good analysis
