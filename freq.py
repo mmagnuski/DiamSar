@@ -179,6 +179,7 @@ def select_channels_special(info, selection):
 
 
 def save_psd(fname, psd, freq, ch_names, subject_id):
+    '''Save power spectral density to disk.'''
     from scipy.io import savemat
     savemat(fname, {'psd': psd, 'freq': freq, 'ch_names': ch_names,
                     'subj_id': subject_id})
@@ -213,14 +214,12 @@ def compute_all_rest(study='C', event_id=None, tmin=1., tmax=60., winlen=2.,
     space : str
         Signal space to use: ``'avg'`` for average referenced, ``'csd'`` for
         Current Source Density and ``'src'`` for source space.
-    progressbar : str
-        FIXME
+    progressbar : str | bool
+        If bool: whether to use progressbar. If string: progressbar to use
+        ('notebook' vs 'text'). Progressbar requires tqdm library to work.
     save_dir : str | None
-        FIXME
-
-    Returns
-    -------
-    FIXME
+        Directory to save the psds to. By default study C main directory is
+        used
     '''
     from . import read_raw
 
@@ -232,7 +231,7 @@ def compute_all_rest(study='C', event_id=None, tmin=1., tmax=60., winlen=2.,
         save_dir = op.join(root_dir, 'analysis', 'psd')
 
     # construct file name based on analysis parameters
-    eyes = ('closed' if not study == 'C'
+    eyes = ('closed' if study not in ['C', 'D']
             else ['open', 'closed'][event_id - 10])
     fname = ('psd_study-{}_eyes-{}_space-{}_winlen-{}_step-{}_'
              'tmin-{}_tmax-{}.mat')
@@ -246,7 +245,7 @@ def compute_all_rest(study='C', event_id=None, tmin=1., tmax=60., winlen=2.,
     for idx, subj_id in enumerate(subj_ids):
         print('Subject #{:02d}, ID: {}'.format(idx, subj_id))
         raw, events = read_raw(subj_id, study=study, task='rest', space=space)
-        events = None if not study == 'C' else events
+        events = None if study not in ['C', 'D'] else events
         psd, freq = compute_rest_psd(raw, events=events, event_id=event_id,
                                      tmin=tmin, tmax=tmax, winlen=winlen,
                                      step=step)
@@ -325,7 +324,6 @@ def make_csd_rest_approx(raw, frequencies, events=None, event_id=None,
 
 
 # - [ ] LATER this might go to borsar
-# - [ ] FIXME - could use picks...
 def make_csd_morlet_raw(raw, freqs, events=None, event_id=None, tmin=0.,
                         tmax=10., n_cycles=3., decim=1):
     '''Calculate cross-spectral density on raw data.
@@ -511,10 +509,10 @@ def get_psds(study='C', space='avg', contrast='cvsd', selection='frontal',
     selection : str
         Channel selection to employ.
     lower_threshold : float
-        BDI threshold for the low-bid group. FIXME - inclusive (<=) or exclusinve?
+        BDI threshold for the low-bid group. See DiamSar.utils.group_bdi.
     higher_threshold : float
         BDI threshold for the high-bid group (depressed or subclinical
-        individuals depending on chosen contrast). FIXME - inclusive (<=) or exclusinve?
+        individuals depending on chosen contrast). See DiamSar.utils.group_bdi.
 
     Returns
     -------

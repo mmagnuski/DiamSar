@@ -21,6 +21,8 @@ def get_task_event_id(raw, event_id, study='C', task='rest'):
             def event_id(name):
                 if 'keyboard' in name:
                     return 99
+                elif name == 'boundary':
+                    return 999
                 else:
                     return int(name)
         return event_id
@@ -40,16 +42,31 @@ def translate_events_D(events):
     '''Translate PREDiCT triggers to a sane format where they signal event
     onset (by default events are sent periodically as long as given event,
     for example eyes closed, lasts).'''
-    close_events = list()
+    onset_events = list()
     types = [[1, 3, 5], [2, 4, 6]]
     translate_to = [11, 10]
     for event_types, translate in zip(types, translate_to):
         for event_type in event_types:
             all_types = np.where(events[:, -1] == event_type)[0]
-            this_event = events[all_types[0], :]
-            this_event[-1] = translate
-            close_events.append(this_event)
-    return np.stack(close_events, axis=0)
+            if len(all_types) > 0:
+                this_event = events[all_types[0], :]
+                this_event[-1] = translate
+                onset_events.append(this_event)
+
+    # join the new annotations with boundary events
+    events_new = np.stack(onset_events, axis=0)
+    where_bounaries = events[:, -1] == 999
+    if where_bounaries.any():
+        events_old = events[where_bounaries, :]
+        events = np.concatenate([events_new, events_old], axis=0)
+    else:
+        events = events_new
+
+    # sort the events array by onset sample
+    ord_idx = np.argsort(events[:, 0])
+    events = events[ord_idx, :]
+
+    return events
 
 
 # TODO - change name, fix suggests repairing, not fixation

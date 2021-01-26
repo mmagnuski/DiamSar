@@ -185,7 +185,7 @@ def load_info(paths, study=None, **kwargs):
 # FIXME - make a general purpose load_neighbours function in borsar
 def load_neighbours(paths, study=None, **kwargs):
     chanlocs_dir = paths.get_path('chanpos', study=study)
-    if study == 'A':
+    if study in ['A', 'D', 'E']:
         from mne.externals import h5io
         full_fname = op.join(chanlocs_dir, 'neighbours.hdf5')
         return h5io.read_hdf5(full_fname)
