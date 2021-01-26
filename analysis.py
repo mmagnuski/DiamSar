@@ -181,7 +181,7 @@ def run_analysis(study='C', contrast='cvsd', eyes='closed', space='avg',
         if 'vs' in contrast:
             # t test in cluster-based permutation test
             from scipy.stats import t
-            from sarna.stats import ttest_ind_no_p
+            from sarna.stats import ttest_ind_welch_no_p
             from mne.stats.cluster_level import permutation_cluster_test
 
             # calculate t test threshold
@@ -190,7 +190,7 @@ def run_analysis(study='C', contrast='cvsd', eyes='closed', space='avg',
 
             # run cluster-based permutation test
             args = dict(threshold=threshold, n_permutations=n_permutations,
-                        stat_fun=ttest_ind_no_p, verbose=verbose)
+                        stat_fun=ttest_ind_welch_no_p, verbose=verbose)
             try:
                 stat, clusters, pval, _ = permutation_cluster_test(
                     [hi, lo], **args, connectivity=adjacency)
@@ -213,7 +213,7 @@ def run_analysis(study='C', contrast='cvsd', eyes='closed', space='avg',
         # multiple comparisons:
         if 'vs' in contrast:
             from scipy.stats import t, ttest_ind
-            stat, pval = ttest_ind(hi, lo)
+            stat, pval = ttest_ind(hi, lo, equal_var=False)
         else:
             from borsar.stats import compute_regression_t
             # compute regression and ignore intercept:
