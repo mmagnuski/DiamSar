@@ -190,7 +190,8 @@ def run_analysis(study='C', contrast='cvsd', eyes='closed', space='avg',
 
             # run cluster-based permutation test
             args = dict(threshold=threshold, n_permutations=n_permutations,
-                        stat_fun=ttest_ind_welch_no_p, verbose=verbose)
+                        stat_fun=ttest_ind_welch_no_p, verbose=verbose,
+                        out_type='mask')
             try:
                 stat, clusters, pval, _ = permutation_cluster_test(
                     [hi, lo], **args, connectivity=adjacency)
@@ -501,9 +502,9 @@ def remove_columns_with_no_variability(df):
 
 
 # TODO - return analyses as a dataframe?
-def list_analyses(study=list('ABC'), contrast=['cvsc', 'cvsd', 'creg', 'cdreg',
-                  'dreg'], eyes=['closed'], space=['avg', 'csd', 'src'],
-                  freq_range=[(8, 13)], avg_freq=[True, False],
+def list_analyses(study=list('ABCDE'), contrast=['cvsc', 'cvsd', 'creg',
+                  'cdreg', 'dreg'], eyes=['closed'], space=['avg', 'csd',
+                  'src'], freq_range=[(8, 13)], avg_freq=[True, False],
                   selection=['asy_frontal', 'asy_pairs', 'all'],
                   transform=['log'], verbose=True):
     '''
@@ -722,12 +723,12 @@ def save_stat(stat, save_dir='stats'):
     if isinstance(stat, Clusters):
         fname = fname.format(*[stat.description[k] for k in keys])
         full_path = op.join(save_dir, fname)
-        stat.save(full_path)
+        stat.save(full_path, overwrite=True)
     else:
         from mne.externals import h5io
         fname = fname.format(*[stat[k] for k in keys])
         full_path = op.join(save_dir, fname)
-        h5io.write_hdf5(full_path, stat)
+        h5io.write_hdf5(full_path, stat, overwrite=True)
 
 
 # TODO: add option to read source space Clusters

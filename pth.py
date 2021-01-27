@@ -106,7 +106,7 @@ def set_paths(base_dir=None):
     # -------------
     # getting files is not yet supported in borsar.Paths so we write a few
     # functions for that
-    files_id_mode = dict(A='anon', B='num', C='num', D='num', E='anon')
+    files_id_mode = dict(A='anon', B='num', C='num', D='num', E='num')
 
     for study in paths.studies:
         files[study] = dict()

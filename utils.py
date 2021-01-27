@@ -18,7 +18,7 @@ colors['mid'] = hc_sub_mid
 colors['gray'] = graycol
 del hc_sub_mid, graycol, col
 
-translate_study = dict(A='I', B='II', C='III')
+translate_study = dict(A='I', B='II', C='III', D='IV', E='V')
 translate_contrast = {'cvsc': 'SvsHC', 'cvsd': 'DvsHC', 'dreg': 'DReg',
                       'cdreg': 'allReg', 'creg': 'nonDReg'}
 
@@ -74,7 +74,8 @@ def group_bdi(subj_id, bdi, method='cvsc', lower_threshold=None,
     has_subj_idx = np.where(has_subj)[0]
     sid = subj_id[has_subj]
     bdi = bdi.loc[sid, :]
-    bdi_col = 'BDI-II' if 'BDI-II' in bdi.columns else 'BDI-I'
+    bdi_col = [col for col in ['BDI-II', 'BDI-I', 'PHQ-9']
+               if col in bdi.columns][0]
 
     if method not in ['cvsd', 'cvsc', 'dreg', 'creg', 'cdreg']:
         raise ValueError('Unexpected method: {}'.format(method))
