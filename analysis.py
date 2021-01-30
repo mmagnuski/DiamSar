@@ -187,15 +187,19 @@ def run_analysis(study='C', contrast='cvsd', eyes='closed', space='avg',
         # depends on the chosen contrast
         hilo = psd[grp['selection']]
 
-        # FIXME - something more in stat info?
-        stat_info['N_all'] = grp['selection'].sum()
-
     # statistical analysis
     # --------------------
     if confounds:
         # we include confounds in the regression analysis
         bdi, hilo = utils.recode_variables(grp['beh'], data=hilo,
                                            use_bdi='reg' in contrast)
+        # calculate N
+        N_all = bdi.shape[0]
+        stat_info['N_all'] = N_all
+        if 'reg' not in contrast:
+            N_hi = (bdi['DIAGNOZA'] > 0).sum()
+            stat_info['N_high'] = N_hi
+            stat_info['N_low'] = N_all - N_hi
         bdi = bdi.values
 
     if 'pairs' not in selection:
@@ -238,29 +242,24 @@ def run_analysis(study='C', contrast='cvsd', eyes='closed', space='avg',
     else:
         # for selected pairs (two channel pairs) we don't correct for
         # multiple comparisons:
-        if 'vs' in contrast:
+        if 'vs' in contrast and not confounds:
             from scipy.stats import t, ttest_ind
             stat, pval = ttest_ind(hi, lo, equal_var=False)
         else:
             from borsar.stats import compute_regression_t
             # compute regression and ignore intercept:
             stat, pval = compute_regression_t(hilo, bdi, return_p=True)
-            stat, pval = stat[1], pval[1]
+            stat, pval = stat[-1], pval[-1]
 
         stat_info.update(dict(stat=stat, pval=pval, ch_names=ch_names))
         return stat_info
 
 
-def summarize_stats(split=True, reduce_columns=True, stat_dir='stats'):
+def summarize_stats_clusters(reduce_columns=True, stat_dir='stats'):
     '''Summarize multiple analyses (saved in analysis dir) in a dataframe.
 
     Parameters
     ----------
-    split : bool
-        Whether to split the results into channel pairs analyses and
-        cluster-based analyses dataframes. If ``True`` returns two dataframes,
-        the first one with channel pair analyses and the second one with
-        cluster-based analyses. Defaults to ``True``.
     reduce_columns : bool
         Whether to remove columns with no variability from the output. Defaults
         to ``True``.
@@ -270,11 +269,8 @@ def summarize_stats(split=True, reduce_columns=True, stat_dir='stats'):
 
     Returns
     -------
-    df | df1, df2 (depending on ``split``) : pandas.DataFrame
-        Dataframe (or dataframes if ``split`` is ``True``) with summarized
-        DiamSar analyses. If ``split=True`` returns two dataframes,
-        the first one with channel pair analyses and the second one with
-        cluster-based analyses.
+    df : pandas.DataFrame
+        Dataframe with summarized DiamSar analyses.
     '''
     from mne.externals import h5io
 
@@ -292,58 +288,81 @@ def summarize_stats(split=True, reduce_columns=True, stat_dir='stats'):
     df = pd.DataFrame(index=np.arange(1, n_stat + 1),
                       columns=stat_params + stat_summary)
 
-    for idx, fname in enumerate(stat_files, start=1):
+    row_idx = 0
+    for fname in stat_files:
+        stat = h5io.read_hdf5(op.join(stat_dir, fname))
+
+        if 'description' not in stat:
+            continue
+
+        row_idx += 1
+        for col in stat_params:
+            value = (stat['description'][col]
+                     if col in stat['description'] else np.nan)
+            if isinstance(value, (list, tuple, np.ndarray)):
+                value = str(value)
+
+            df.loc[row_idx, col] = value
+
+        # summarize clusters
+        n_clst = len(stat['clusters']) if stat['clusters'] is not None else 0
+        df.loc[row_idx, 'min t'] = stat['stat'].min()
+        df.loc[row_idx, 'max t'] = stat['stat'].max()
+        df.loc[row_idx, 'n clusters'] = n_clst
+
+        min_cluster_p = stat['pvals'].min() if n_clst > 0 else np.nan
+        n_below_thresh = (stat['pvals'] < 0.05).sum() if n_clst > 0 else 0
+        df.loc[row_idx, 'min cluster p'] = min_cluster_p
+        df.loc[row_idx, stat_summary[4]] = n_below_thresh
+        df.loc[row_idx, stat_summary[5]] = (np.abs(stat['stat']) > 2.).sum()
+
+        largest_cluster = (max([c.sum() for c in stat['clusters']])
+                           if n_clst > 0 else np.nan)
+        df.loc[row_idx, stat_summary[6]] = largest_cluster
+
+    # reduce columns
+    df = df.loc[:row_idx, :]
+    if reduce_columns:
+        df = remove_columns_with_no_variability(df)
+
+    return utils.reformat_stat_table(df)
+
+
+def summarize_stats_pairs(reduce_columns=True):
+    from mne.externals import h5io
+    stat_dir = op.join(pth.paths.get_path('main', 'C'), 'analysis', 'stats')
+    stat_files = [f for f in os.listdir(stat_dir) if f.endswith('.hdf5')]
+    n_stat = len(stat_files)
+
+    # first, create an empty dataframe
+    stat_params = ['study', 'contrast', 'space', 'N_low', 'N_high', 'N_all',
+                   'eyes', 'selection', 'freq_range', 'avg_freq', 'transform',
+                   'div_by_sum']
+    stat_summary = ['t 1', 'p 1', 't 2', 'p 2']
+    df = pd.DataFrame(index=np.arange(1, n_stat + 1),
+                      columns=stat_params + stat_summary)
+
+    row_idx = 0
+    for fname in stat_files:
         stat = h5io.read_hdf5(op.join(stat_dir, fname))
 
         if 'description' in stat:
-            for col in stat_params:
-                df.loc[idx, col] = (stat['description'][col]
-                                    if col in stat['description'] else np.nan)
+            continue
 
-            # summarize clusters
-            n_clst = (len(stat['clusters']) if stat['clusters']
-                      is not None else 0)
-            df.loc[idx, stat_summary[0]] = stat['stat'].min()
-            df.loc[idx, stat_summary[1]] = stat['stat'].max()
-            df.loc[idx, stat_summary[2]] = n_clst
-            df.loc[idx, stat_summary[3]] = (stat['pvals'].min()
-                                            if n_clst > 0 else np.nan)
-            df.loc[idx, stat_summary[4]] = ((stat['pvals'] < 0.05).sum()
-                                            if n_clst > 0 else 0)
-            df.loc[idx, stat_summary[5]] = (np.abs(stat['stat']) > 2.).sum()
-            df.loc[idx, stat_summary[6]] = (
-                max([c.sum() for c in stat['clusters']])
-                if n_clst > 0 else np.nan)
-        else:
-            for col in stat_params:
-                df.loc[idx, col] = stat[col] if col in stat else np.nan
+        row_idx += 1
+        for col in stat_params:
+            df.loc[row_idx, col] = stat[col] if col in stat else np.nan
 
-            df.loc[idx, stat_summary[0]] = stat['stat'][0]
-            df.loc[idx, stat_summary[1]] = stat['stat'][1]
-            df.loc[idx, stat_summary[2]] = np.nan
-            df.loc[idx, stat_summary[3]] = stat['pval']
-            df.loc[idx, stat_summary[4]] = np.nan
-            df.loc[idx, stat_summary[5]] = (stat['pval'] < 0.05).sum()
-            df.loc[idx, stat_summary[6]] = np.nan
-
-    # split into two dfs
-    if split:
-        pair_rows = df['selection'].str.contains('pairs').values
-        df1 = df.loc[pair_rows, :].reset_index(drop=True)
-        df2 = df.loc[~pair_rows, :].reset_index(drop=True)
+        df.loc[row_idx, stat_summary[0]] = stat['stat'][0]
+        df.loc[row_idx, stat_summary[1]] = stat['pval'][0]
+        df.loc[row_idx, stat_summary[2]] = stat['stat'][1]
+        df.loc[row_idx, stat_summary[3]] = stat['pval'][1]
 
     # reduce columns
+    df = df.loc[:row_idx, :]
     if reduce_columns:
-        if split:
-            df1 = remove_columns_with_no_variability(df1)
-            df2 = remove_columns_with_no_variability(df2)
-        else:
-            df = remove_columns_with_no_variability(df)
-
-    if split:
-        return df1, df2
-    else:
-        return df
+        df = remove_columns_with_no_variability(df)
+    return utils.reformat_stat_table(df)
 
 
 def summarize_ch_pair_stats(reduce_columns=True, stat_dir='stats',
@@ -532,7 +551,7 @@ def list_analyses(study=list('ABCDE'), contrast=['cvsc', 'cvsd', 'creg',
                   'cdreg', 'dreg'], eyes=['closed'], space=['avg', 'csd',
                   'src'], freq_range=[(8, 13)], avg_freq=[True, False],
                   selection=['asy_frontal', 'asy_pairs', 'all'],
-                  transform=['log'], verbose=True):
+                  transform=['log'], confounds=[False], verbose=True):
     '''
     List all possible analyses for given set of parameter options.
     For explanation of the arguments see ``DiamSar.analysis.run_analysis``.
@@ -550,14 +569,14 @@ def list_analyses(study=list('ABCDE'), contrast=['cvsc', 'cvsd', 'creg',
 
     from itertools import product
     prod = list(product(study, contrast, eyes, space, freq_range, avg_freq,
-                        selection, transform))
+                        selection, transform, confounds))
 
     if verbose:
         all_combinations = len(prod)
         print('All analysis combinations: {:d}'.format(all_combinations))
 
     good_analyses = list()
-    for std, cntr, eye, spc, frqrng, avgfrq, sel, trnsf in prod:
+    for std, cntr, eye, spc, frqrng, avgfrq, sel, trnsf, conf in prod:
         # averaging alpha frequency range is ommited only for wide frequency
         # range
         if not avgfrq and not frqrng == (8, 13):
@@ -592,7 +611,8 @@ def list_analyses(study=list('ABCDE'), contrast=['cvsc', 'cvsd', 'creg',
             continue
 
         # else: good analysis
-        good_analyses.append((std, cntr, eye, spc, frqrng, avgfrq, sel, trnsf))
+        good_analyses.append((std, cntr, eye, spc, frqrng, avgfrq, sel, trnsf,
+                              conf))
 
     if verbose:
         reduced = len(good_analyses)
@@ -637,13 +657,15 @@ def run_many(study=list('ABC'), contrast=['cvsc', 'cvsd', 'creg', 'cdreg',
             save_stat(stat, save_dir=save_dir)
         pbar.update(1)
     pbar.update(1)
+    pbar.close()
 
 
 def analyses_to_df(analyses):
     '''Turn list of tuples with analysis parameters to dataframe
     representation.'''
     df = pd.DataFrame(columns=['study', 'contrast', 'eyes', 'space', 'freq',
-                               'avg_freq', 'selection', 'transform'])
+                               'avg_freq', 'selection', 'transform',
+                               'confounds'])
     for idx, analysis in enumerate(analyses):
         if isinstance(analysis[4], (list, tuple)):
             analysis = list(analysis)

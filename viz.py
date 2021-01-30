@@ -392,7 +392,7 @@ def plot_heatmap_add1(clst, ax_dict=None, scale=None):
 def bdi_histogram(bdi):
     '''Plot BDI histogram from ``bdi`` dataframe of given study.'''
     msk = bdi.DIAGNOZA
-    bdi_col = [c for c in bdi.columns if 'BDI' in c][0]
+    bdi_col = [c for c in bdi.columns if 'BDI' in c or 'PHQ' in c][0]
     hc = bdi.loc[~msk, bdi_col].values
     diag = bdi.loc[msk, bdi_col].values
     hc1 = hc[hc <= 5]

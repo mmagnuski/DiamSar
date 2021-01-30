@@ -24,7 +24,7 @@ translate_contrast = {'cvsc': 'SvsHC', 'cvsd': 'DvsHC', 'dreg': 'DReg',
 
 
 # FIXME - add more tests
-def group_bdi(subj_id, bdi, method='cvsc', lower_threshold=None,
+def group_bdi(subj_id, beh, method='cvsc', lower_threshold=None,
               higher_threshold=None, full_table=False):
     '''Select and group subjects according to a desired contrast.
 
@@ -33,10 +33,10 @@ def group_bdi(subj_id, bdi, method='cvsc', lower_threshold=None,
     subj_id : listlike of int
         Identifiers of the subjects to choose. Some subjects are rejected
         so we want to select a subsample of all subjects.
-    bdi : pandas DataFrame
-        Dataframe with columns specifying BDI (either ``BDI-I`` or ``BDI-II``)
-        and diagnosis status (``DIAGNOZA`` - boolean). The rows should be
-        indexed with subject identifiers.
+    beh : pandas DataFrame
+        Dataframe with columns specifying BDI (either ``BDI-I``, ``BDI-II``
+        or ``PHQ-9``) and diagnosis status (``DIAGNOZA`` - boolean). The rows
+        should be indexed with subject identifiers.
     method : string
         There are five possible methods available:
         * 'cvsc'  - contrast high and low-BDI controls
@@ -78,37 +78,37 @@ def group_bdi(subj_id, bdi, method='cvsc', lower_threshold=None,
     '''
     # select only those subjects that have eeg and are present
     # in the behavioral database
-    has_subj = np.in1d(subj_id, bdi.index)
+    has_subj = np.in1d(subj_id, beh.index)
     has_subj_idx = np.where(has_subj)[0]
     sid = subj_id[has_subj]
-    bdi = bdi.loc[sid, :]
+    beh = beh.loc[sid, :]
     bdi_col = [col for col in ['BDI-II', 'BDI-I', 'PHQ-9']
-               if col in bdi.columns][0]
+               if col in beh.columns][0]
 
     if method not in ['cvsd', 'cvsc', 'dreg', 'creg', 'cdreg']:
         raise ValueError('Unexpected method: {}'.format(method))
 
     if method == 'cvsc':
-        bdi_sel = bdi.loc[~bdi.DIAGNOZA, bdi_col].values
+        bdi_sel = beh.loc[~beh.DIAGNOZA, bdi_col].values
         lower_threshold = _check_threshold(lower_threshold, bdi_sel, 5)
         higher_threshold = _check_threshold(higher_threshold, bdi_sel, 10)
 
-        selection_low = ~bdi.DIAGNOZA & (bdi[bdi_col] <= lower_threshold)
-        selection_high = ~bdi.DIAGNOZA & (bdi[bdi_col] > higher_threshold)
+        selection_low = ~beh.DIAGNOZA & (beh[bdi_col] <= lower_threshold)
+        selection_high = ~beh.DIAGNOZA & (beh[bdi_col] > higher_threshold)
 
     elif method == 'cvsd':
         lower_threshold = 5 if lower_threshold is None else lower_threshold
         higher_threshold = 0 if higher_threshold is None else higher_threshold
 
-        selection_low = ~bdi.DIAGNOZA & (bdi[bdi_col] <= lower_threshold)
-        selection_high = bdi.DIAGNOZA & (bdi[bdi_col] > higher_threshold)
+        selection_low = ~beh.DIAGNOZA & (beh[bdi_col] <= lower_threshold)
+        selection_high = beh.DIAGNOZA & (beh[bdi_col] > higher_threshold)
     elif 'reg' in method:
         selected = np.zeros(len(sid), dtype='bool')
         if 'c' in method:
-            selected = ~bdi.DIAGNOZA.values
+            selected = ~beh.DIAGNOZA.values
         if 'd' in method:
-            selected = selected | bdi.DIAGNOZA.values
-        bdi = bdi.loc[selected, bdi_col].values
+            selected = selected | beh.DIAGNOZA.values
+        bdi = beh.loc[selected, bdi_col].values
 
     if 'reg' not in method:
         selected = selection_low | selection_high
@@ -125,9 +125,8 @@ def group_bdi(subj_id, bdi, method='cvsc', lower_threshold=None,
         if method == 'cvsc':
             # we add 'fake' diagnosis grouping variable so that further
             # steps of confound regression analysis of cvsc contrast work well
-            bdi.loc[:, 'DIAGNOZA'] = False
-            bdi.loc[selection_high, 'DIAGNOZA'] = True
-        grouping['beh'] = bdi.loc[selected, :]
+            beh.loc[selection_high, 'DIAGNOZA'] = True
+        grouping['beh'] = beh.loc[selected, :]
     return grouping
 
 
@@ -188,12 +187,13 @@ def recode_variables(beh, use_bdi=False, data=None, warn_prop_missing=0.05):
 
     # remove participants with missing data
     has_missing = beh.isnull().any(axis=1)
-    beh = beh.loc[~has_missing, :]
 
     # make sure biological data are also pruned
     if data is not None:
         assert data.shape[0] == beh.shape[0]
         data = data[~has_missing]
+
+    beh = beh.loc[~has_missing, :]
 
     # warn if too many missing
     prop_missing = has_missing.mean()
