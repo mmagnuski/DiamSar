@@ -14,7 +14,7 @@ from .freq import format_psds, get_psds
 def run_analysis(study='C', contrast='cvsd', eyes='closed', space='avg',
                  freq_range=(8, 13), avg_freq=True, selection='frontal_asy',
                  div_by_sum=False, transform='log', n_permutations=10000,
-                 cluster_p_threshold=0.05, verbose=True):
+                 cluster_p_threshold=0.05, confounds=False, verbose=True):
     '''Run DiamSar analysis with specified parameters.
 
     Parameters
@@ -112,6 +112,14 @@ def run_analysis(study='C', contrast='cvsd', eyes='closed', space='avg',
         test. ``10000`` by default.
     cluster_p_threshold : float, optional
         Cluster entry p value threshold. ``0.05`` by default.
+    confounds : bool
+        Whether to include potential confounds in the analysis. These include:
+        sex, age and education (if they are available for given study). This
+        option works only when full behavioral data are available
+        (``paths.get_data('bdi', full_table=True)``), so it may not work for
+        some of the datasets I - III hosted on Dryad (Dryad does not allow
+        more than 3 variables per participant to avoid the possibility of
+        individual identification).
     verbose : bool | int
         Verbosity level supported by mne-python. ``True`` by default.
 
@@ -130,7 +138,7 @@ def run_analysis(study='C', contrast='cvsd', eyes='closed', space='avg',
                      div_by_sum=div_by_sum)
 
     # load relevant data
-    bdi = pth.paths.get_data('bdi', study=study)
+    bdi = pth.paths.get_data('bdi', study=study, full_table=confounds)
     psds, freq, ch_names, subj_id = pth.paths.get_data(
         'psd', study=study, eyes=eyes, space=space)
 
@@ -162,23 +170,39 @@ def run_analysis(study='C', contrast='cvsd', eyes='closed', space='avg',
         psd = psd.transpose((0, 2, 1))
 
     # group psds by chosen contrast
-    grp = utils.group_bdi(subj_id, bdi, method=contrast)
-    if 'reg' not in contrast:
-        hi, lo = psd[grp['high']], psd[grp['low']]
-        stat_info.update(dict(N_low=lo.shape[0], N_high=hi.shape[0],
-                              N_all=lo.shape[0] + hi.shape[0]))
+    grp = utils.group_bdi(subj_id, bdi, method=contrast, full_table=confounds)
+
+    # create contrast-specific variables
+    if not confounds:
+        if 'reg' not in contrast:
+            hi, lo = psd[grp['high']], psd[grp['low']]
+            stat_info.update(dict(N_low=lo.shape[0], N_high=hi.shape[0],
+                                  N_all=lo.shape[0] + hi.shape[0]))
+        else:
+            bdi = grp['bdi']
+            hilo = psd[grp['selection']]
+            stat_info['N_all'] = grp['selection'].sum()
     else:
-        bdi = grp['bdi']
+        # we perform linear regression, where predictor of interest
+        # depends on the chosen contrast
         hilo = psd[grp['selection']]
+
+        # FIXME - something more in stat info?
         stat_info['N_all'] = grp['selection'].sum()
 
     # statistical analysis
     # --------------------
+    if confounds:
+        # we include confounds in the regression analysis
+        bdi, hilo = utils.recode_variables(grp['beh'], data=hilo,
+                                           use_bdi='reg' in contrast)
+        bdi = bdi.values
+
     if 'pairs' not in selection:
         # cluster-based permutation tests for multiple comparisons
         stat_info.update(dict(cluster_p_threshold=cluster_p_threshold))
 
-        if 'vs' in contrast:
+        if 'vs' in contrast and not confounds:
             # t test in cluster-based permutation test
             from scipy.stats import t
             from sarna.stats import ttest_ind_welch_no_p
@@ -201,9 +225,11 @@ def run_analysis(study='C', contrast='cvsd', eyes='closed', space='avg',
         else:
             # regression in cluster-based permutation test
             from borsar.cluster import cluster_based_regression
-            stat, clusters, pval = cluster_based_regression(
-                hilo, bdi, n_permutations=n_permutations, adjacency=adjacency,
-                alpha_threshold=cluster_p_threshold)
+
+            args = dict(n_permutations=n_permutations, adjacency=adjacency,
+                        alpha_threshold=cluster_p_threshold, cluster_pred=-1)
+
+            stat, clusters, pval = cluster_based_regression(hilo, bdi, **args)
 
         # construct Clusters with stat_info in description
         return _construct_clusters(clusters, pval, stat, space, stat_info,
@@ -381,7 +407,7 @@ def summarize_ch_pair_stats(reduce_columns=True, stat_dir='stats',
                 esci = esci_indep_cohens_d(psd_high[:, ch_idx],
                                            psd_low[:, ch_idx])
             else:
-                psd_sel, info_sel, bdi_sel = loaded
+                psd_sel, bdi_sel, ch_names = loaded
                 esci = esci_regression_r(psd_sel[:, ch_idx], bdi_sel)
 
             df.loc[idx, stat_summary[stat_col + 2]] = esci['es']
@@ -577,7 +603,7 @@ def list_analyses(study=list('ABCDE'), contrast=['cvsc', 'cvsd', 'creg',
 
 def run_many(study=list('ABC'), contrast=['cvsc', 'cvsd', 'creg', 'cdreg',
              'dreg'], eyes=['closed'], space=['avg', 'csd', 'src'],
-             freq_range=[(8, 13)], avg_freq=[True, False],
+             freq_range=[(8, 13)], avg_freq=[True, False], confounds=False,
              selection=['asy_frontal', 'asy_pairs', 'all'], transform=['log'],
              analyses=None, progressbar='notebook', save_dir='stats'):
     '''
@@ -592,21 +618,22 @@ def run_many(study=list('ABC'), contrast=['cvsc', 'cvsd', 'creg', 'cdreg',
     pass the analyses via the ``analyses`` keyword argument. The analyses
     have to be in the format used by ``DiamSar.analysis.list_analyses``:
     list of (study, contrast, eyes, space, freq_range, avg_freq, selection,
-    transform) tuples.
+    transform, confounds) tuples.
     '''
     from borsar.utils import silent_mne
     from DiamSar.utils import progressbar as pbarobj
 
     if analyses is None:
         analyses = list_analyses(study, contrast, eyes, space, freq_range,
-                                 avg_freq, selection, transform)
+                                 avg_freq, selection, transform, confounds)
 
     pbar = pbarobj(progressbar, len(analyses))
-    for std, cntr, eys, spc, frqrng, avgfrq, sel, trnsf in analyses:
+    for std, cntr, eys, spc, frqrng, avgfrq, sel, trnsf, conf in analyses:
         with silent_mne(full_silence=True):
             stat = run_analysis(study=std, contrast=cntr, eyes=eys, space=spc,
                                 freq_range=frqrng, avg_freq=avgfrq,
-                                selection=sel, transform=trnsf, verbose=False)
+                                selection=sel, transform=trnsf, confounds=conf,
+                                verbose=False)
             save_stat(stat, save_dir=save_dir)
         pbar.update(1)
     pbar.update(1)

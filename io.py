@@ -77,16 +77,29 @@ def read_bdi(paths, study='C', **kwargs):
     if study == 'B':
         if full_table:
             bdi = pd.read_excel(op.join(beh_dir, 'BAZA DANYCH.xlsx'))
-            sel_col = ['BDI 2-pomiar wynik', 'wykształcenie', 'wiek', 'płeć']
+            sel_col = ['nr osoby', 'BDI 2-pomiar wynik', 'wykształcenie',
+                       'wiek', 'płeć']
             sel_col = [col for col in sel_col if col in bdi.columns]
             bdi = bdi[sel_col]
 
+            # trim rows
+            idx = np.where(bdi['nr osoby'].isnull())[0][0]
+            bdi = bdi.iloc[:idx, :]
+
             # rename columns
-            rename_col = {'wiek': 'age', 'płeć': 'sex',
+            rename_col = {'wiek': 'age', 'płeć': 'sex', 'nr osoby': 'ID',
                           'BDI 2-pomiar wynik': 'BDI-I',
                           'wykształcenie': 'education'}
             bdi = bdi.rename(columns=rename_col)
-            # ! check ID with 'BDI.xlsx' !
+
+            # rename sex to female / male
+            bdi.loc[:, 'sex'] = bdi.sex.replace({'k': 'female', 'm': 'male'})
+
+            # missing values should be NaN
+            msk = bdi.loc[:, 'BDI-I'] == 'brak'
+            bdi.loc[msk, 'BDI-I'] = np.nan
+
+            bdi = bdi.infer_objects()
         else:
             bdi = pd.read_excel(op.join(beh_dir, 'BDI.xlsx'), header=None,
                                 names=['ID', 'BDI-I'])
@@ -122,9 +135,9 @@ def read_bdi(paths, study='C', **kwargs):
         bdi = bdi.rename(columns=rename_col)
 
     if study == 'E':
-        fname = ('subjects_information_EEG_128channels_resting_'
-                 'lanzhou_2015.xlsx')
-        bdi = pd.read_excel(op.join(beh_dir, fname))
+        # original database name is 'subjects_information_EEG_128channels_
+        # resting_lanzhou_2015.xlsx'
+        bdi = pd.read_excel(op.join(beh_dir, 'database_MODMA.xlsx'))
         bdi.loc[:, 'DIAGNOZA'] = bdi.type == 'MDD'
         sel_col = ['subject id', 'DIAGNOZA', 'PHQ-9']
 

@@ -25,7 +25,7 @@ translate_contrast = {'cvsc': 'SvsHC', 'cvsd': 'DvsHC', 'dreg': 'DReg',
 
 # FIXME - add more tests
 def group_bdi(subj_id, bdi, method='cvsc', lower_threshold=None,
-              higher_threshold=None):
+              higher_threshold=None, full_table=False):
     '''Select and group subjects according to a desired contrast.
 
     Parameters
@@ -55,6 +55,14 @@ def group_bdi(subj_id, bdi, method='cvsc', lower_threshold=None,
         higher group.
         The default higher threshold is ``0`` for 'cvsd' contrast and ``10``
         for 'cvsc' contrast.
+    full_table : bool
+        Whether to include full behavioral table in the output. This is used
+        to include potential confounds in the analysis (for example sex, age
+        and education). This option works only when full behavioral data
+        are available (``paths.get_data('bdi', full_table=True)``), so it may
+        not work for some of the datasets I - III hosted on Dryad (Dryad does
+        not allow more than 3 variables per participant to avoid the
+        possibility of individual identification).
 
     Returns
     -------
@@ -113,6 +121,13 @@ def group_bdi(subj_id, bdi, method='cvsc', lower_threshold=None,
                         high=has_subj_idx[selection_high])
     else:
         grouping = dict(selection=selection, bdi=bdi)
+    if full_table:
+        if method == 'cvsc':
+            # we add 'fake' diagnosis grouping variable so that further
+            # steps of confound regression analysis of cvsc contrast work well
+            bdi.loc[:, 'DIAGNOZA'] = False
+            bdi.loc[selection_high, 'DIAGNOZA'] = True
+        grouping['beh'] = bdi.loc[selected, :]
     return grouping
 
 
@@ -121,6 +136,107 @@ def _check_threshold(thresh, values, default):
     if isinstance(thresh, str) and thresh[-1] == '%':
         thresh = np.percentile(values, int(thresh[:-1]))
     return thresh
+
+
+def recode_variables(beh, use_bdi=False, data=None, warn_prop_missing=0.05):
+    '''Recode and rescale variables in full behavioral dataframes for
+    regression analyses that take confounds into account.
+    Scaling continuous variables by 2SDs and leaving dummy variables intact
+    has been advocated by Gelman (2008), but specifically in the context of
+    interpretting regression coefficients. In our analyses we don't
+    interpret the coefficients and often want the intercept to refer to
+    the grand mean (not to the mean of a specific group). Therefore we
+    standardize continuous variables (age, education) and center dichotomous/
+    dummy variables (sex, diagnosis).
+
+    Parameters
+    ----------
+    beh : pandas DataFrame
+        Full behavioral data.
+    use_bdi : bool
+        Whether the predictor of interest (and thus the last column in the
+        output) should be BDI/PHQ-9 (``use_bdi=True``) or diagnosis status.
+        The default is ``False``.
+    data : numpy array
+        Data array to align with the behavioral data. The first step when
+        recoding the variables is to reject participants with missing data.
+        This necessitates removal of corresponding rows from electro-
+        physiological data. Data passed to this argument will be also returned
+        as the second output of the function.
+    warn_prop_missing : float
+        Raise a warning higher proportion of rows are removed from the data.
+
+    Returns
+    -------
+    beh : pandas DataFrame
+        Recoded behavioral dataframe.
+    data : numpy array
+        If data argument was used, then the second output is the data array
+        aligned with the behavioral data.
+    '''
+    from scipy.stats import zscore
+
+    sel_cols = ['sex', 'age', 'education']
+    if use_bdi:
+        bdi_col = [col for col in ['BDI-I', 'BDI-II', 'PHQ-9']
+                   if col in beh.columns][0]
+        sel_cols.append(bdi_col)
+    else:
+        sel_cols.append('DIAGNOZA')
+
+    beh = beh.copy()
+
+    # remove participants with missing data
+    has_missing = beh.isnull().any(axis=1)
+    beh = beh.loc[~has_missing, :]
+
+    # make sure biological data are also pruned
+    if data is not None:
+        assert data.shape[0] == beh.shape[0]
+        data = data[~has_missing]
+
+    # warn if too many missing
+    prop_missing = has_missing.mean()
+    if prop_missing > warn_prop_missing:
+        from warnings import warn
+        msg = '{:.1f}% of cases removed due to missing data.'
+        warn(msg.format(prop_missing * 100))
+
+    # recode sex to zeros and ones, then center
+    sx = beh.sex.replace({'female': 1, 'male': 0})
+    beh.loc[:, 'sex'] = sx - sx.mean()
+
+    # center diagnosis
+    if not use_bdi:
+        diag = beh.loc[:, 'DIAGNOZA']
+        beh.loc[:, 'DIAGNOZA'] = diag - diag.mean()
+
+    # standardize age and education
+    beh.loc[:, 'age'] = zscore(beh.loc[:, 'age'])
+    if 'education' in beh.columns:
+        if beh.education.dtype == 'O':
+            # Wronski study, we construct dummy codes for education
+            beh.loc[:, 'lic'] = beh.education == 'licencjat'
+            beh.loc[:, 'mgr'] = ((beh.education == 'magisterskie')
+                                 | (beh.education == 'podyplomowe'))
+
+            beh.loc[:, 'lic'] = beh.loc[:, 'lic'] - beh.loc[:, 'lic'].mean()
+            beh.loc[:, 'mgr'] = beh.loc[:, 'mgr'] - beh.loc[:, 'mgr'].mean()
+
+            sel_cols = sel_cols[:2] + ['lic', 'mgr'] + sel_cols[3:]
+        else:
+            beh.loc[:, 'education'] = zscore(beh.loc[:, 'education'])
+    else:
+        sel_cols.remove('education')
+
+    # standardize bdi
+    if use_bdi:
+        beh.loc[:, bdi_col] = zscore(beh.loc[:, bdi_col])
+
+    if data is None:
+        return beh.loc[:, sel_cols]
+    else:
+        return beh.loc[:, sel_cols], data
 
 
 def reformat_stat_table(tbl):
