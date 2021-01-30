@@ -30,14 +30,17 @@ def read_bdi(paths, study='C', **kwargs):
         Which study to use. Studies are coded with letters in the following
         fashion:
 
-        =====   ============   ============
-        study   study letter   study name
-        =====   ============   ============
+        =====   ============   ===============
+        study   study letter   study directory
+        =====   ============   ===============
         I       A              Nowowiejska
         II      B              Wronski
         III     C              DiamSar
-        =====   ============   ============
+        IV      D              PREDiCT
+        V       E              MODMA
+        =====   ============   ===============
 
+        Study ``'C'`` is used by default.
     full_table : bool
         Whether to read full table, containing for example age and sex.
         This option is not used in "Three times NO" paper.
@@ -116,6 +119,23 @@ def read_bdi(paths, study='C', **kwargs):
 
         bdi = bdi[sel_col]
         rename_col = {'id': 'ID', 'BDI': 'BDI-II'}
+        bdi = bdi.rename(columns=rename_col)
+
+    if study == 'E':
+        fname = ('subjects_information_EEG_128channels_resting_'
+                 'lanzhou_2015.xlsx')
+        bdi = pd.read_excel(op.join(beh_dir, fname))
+        bdi.loc[:, 'DIAGNOZA'] = bdi.type == 'MDD'
+        sel_col = ['subject id', 'DIAGNOZA', 'PHQ-9']
+
+        if full_table:
+            sel_col = sel_col + ['sex', 'age', 'education']
+            relabel = {'F': 'female', 'M': 'male'}
+            bdi.loc[:, 'sex'] = bdi.gender.replace(relabel)
+            bdi = bdi.rename(columns={'education（years）': 'education'})
+
+        bdi = bdi.loc[:, sel_col]
+        rename_col = {'subject id': 'ID'}
         bdi = bdi.rename(columns=rename_col)
 
     return bdi.set_index('ID')

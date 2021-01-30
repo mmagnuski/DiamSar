@@ -35,10 +35,23 @@ def read_raw(fname, study='C', task='rest', space='avg'):
         Name of the file to read. If int it is meant to be a subject
         identifier. It can also be int-like string for example '003'.
     study : str
-        Study letter identifier. "A" (Nowowiejska), "B" (Wroński) or "C"
-        (DiamSar).
+        Which study to use. Studies are coded with letters in the following
+        fashion:
+
+        =====   ============   ===============
+        study   study letter   study directory
+        =====   ============   ===============
+        I       A              Nowowiejska
+        II      B              Wronski
+        III     C              DiamSar
+        IV      D              PREDiCT
+        V       E              MODMA
+        =====   ============   ===============
+
+        Study ``'C'`` is used by default.
     task : str
-        Task to read, 'rest' or 'sternberg'.
+        Task to read, 'rest' or 'sternberg'. 'sternberg' is available only for
+        study C.
     space : str
         Data space: average referenced channel space (``"avg"``), current
         source density (``"csd"``) or DICS beamformer-localized source space

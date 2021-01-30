@@ -23,13 +23,15 @@ def run_analysis(study='C', contrast='cvsd', eyes='closed', space='avg',
         Which study to use. Studies are coded with letters in the following
         fashion:
 
-        =====   ============   ============
-        study   study letter   study name
-        =====   ============   ============
+        =====   ============   ===============
+        study   study letter   study directory
+        =====   ============   ===============
         I       A              Nowowiejska
         II      B              Wronski
         III     C              DiamSar
-        =====   ============   ============
+        IV      D              PREDiCT
+        V       E              MODMA
+        =====   ============   ===============
 
         Study ``'C'`` is used by default.
     contrast : str
@@ -179,7 +181,7 @@ def run_analysis(study='C', contrast='cvsd', eyes='closed', space='avg',
         if 'vs' in contrast:
             # t test in cluster-based permutation test
             from scipy.stats import t
-            from sarna.stats import ttest_ind_no_p
+            from sarna.stats import ttest_ind_welch_no_p
             from mne.stats.cluster_level import permutation_cluster_test
 
             # calculate t test threshold
@@ -187,10 +189,15 @@ def run_analysis(study='C', contrast='cvsd', eyes='closed', space='avg',
             threshold = t.ppf(1 - cluster_p_threshold / 2, df)
 
             # run cluster-based permutation test
-            stat, clusters, pval, _ = permutation_cluster_test(
-                [hi, lo], threshold=threshold, n_permutations=n_permutations,
-                stat_fun=ttest_ind_no_p, connectivity=adjacency,
-                verbose=verbose)
+            args = dict(threshold=threshold, n_permutations=n_permutations,
+                        stat_fun=ttest_ind_welch_no_p, verbose=verbose,
+                        out_type='mask')
+            try:
+                stat, clusters, pval, _ = permutation_cluster_test(
+                    [hi, lo], **args, connectivity=adjacency)
+            except TypeError:
+                stat, clusters, pval, _ = permutation_cluster_test(
+                    [hi, lo], **args, adjacency=adjacency)
         else:
             # regression in cluster-based permutation test
             from borsar.cluster import cluster_based_regression
@@ -207,7 +214,7 @@ def run_analysis(study='C', contrast='cvsd', eyes='closed', space='avg',
         # multiple comparisons:
         if 'vs' in contrast:
             from scipy.stats import t, ttest_ind
-            stat, pval = ttest_ind(hi, lo)
+            stat, pval = ttest_ind(hi, lo, equal_var=False)
         else:
             from borsar.stats import compute_regression_t
             # compute regression and ignore intercept:
@@ -495,9 +502,9 @@ def remove_columns_with_no_variability(df):
 
 
 # TODO - return analyses as a dataframe?
-def list_analyses(study=list('ABC'), contrast=['cvsc', 'cvsd', 'creg', 'cdreg',
-                  'dreg'], eyes=['closed'], space=['avg', 'csd', 'src'],
-                  freq_range=[(8, 13)], avg_freq=[True, False],
+def list_analyses(study=list('ABCDE'), contrast=['cvsc', 'cvsd', 'creg',
+                  'cdreg', 'dreg'], eyes=['closed'], space=['avg', 'csd',
+                  'src'], freq_range=[(8, 13)], avg_freq=[True, False],
                   selection=['asy_frontal', 'asy_pairs', 'all'],
                   transform=['log'], verbose=True):
     '''
@@ -525,7 +532,8 @@ def list_analyses(study=list('ABC'), contrast=['cvsc', 'cvsd', 'creg', 'cdreg',
 
     good_analyses = list()
     for std, cntr, eye, spc, frqrng, avgfrq, sel, trnsf in prod:
-        # only wide frequency range is not averarged
+        # averaging alpha frequency range is ommited only for wide frequency
+        # range
         if not avgfrq and not frqrng == (8, 13):
             continue
 
@@ -544,14 +552,17 @@ def list_analyses(study=list('ABC'), contrast=['cvsc', 'cvsd', 'creg', 'cdreg',
         # non availability
         # ----------------
 
-        # only study C has segments with open eyes
-        if not std == 'C' and eye == 'open':
+        # only studies C and D contain segments with open eyes
+        if std not in ['C', 'D'] and eye == 'open':
             continue
         # study B does not have a diagnosed group
         if std == 'B' and cntr in ['cdreg', 'cvsd', 'dreg']:
             continue
         # study A has controls only with low BDI
         if std == 'A' and cntr in ['cvsc', 'creg', 'cdreg']:
+            continue
+        # study E did not measure BDI
+        if std == 'E' and not cntr == 'cvsd':
             continue
 
         # else: good analysis
@@ -712,12 +723,12 @@ def save_stat(stat, save_dir='stats'):
     if isinstance(stat, Clusters):
         fname = fname.format(*[stat.description[k] for k in keys])
         full_path = op.join(save_dir, fname)
-        stat.save(full_path)
+        stat.save(full_path, overwrite=True)
     else:
         from mne.externals import h5io
         fname = fname.format(*[stat[k] for k in keys])
         full_path = op.join(save_dir, fname)
-        h5io.write_hdf5(full_path, stat)
+        h5io.write_hdf5(full_path, stat, overwrite=True)
 
 
 # TODO: add option to read source space Clusters
