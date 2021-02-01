@@ -389,7 +389,7 @@ def plot_heatmap_add1(clst, ax_dict=None, scale=None):
 
 
 # TODO: compare with the one in script to see which one is used in the paper
-def bdi_histogram(bdi):
+def bdi_histogram(bdi, omit_unclassified=False, bin_step=5):
     '''Plot BDI histogram from ``bdi`` dataframe of given study.'''
     msk = bdi.DIAGNOZA
     bdi_col = [c for c in bdi.columns if 'BDI' in c or 'PHQ' in c][0]
@@ -399,23 +399,33 @@ def bdi_histogram(bdi):
     hc2 = hc[(hc > 5) & (hc <= 10)]
     hc3 = hc[hc > 10]
 
+    data = [hc1, hc2, hc3, diag]
+    colors_list = [colors['hc'], colors['mid'], colors['subdiag'],
+                   colors['diag']]
+    if omit_unclassified:
+        data.pop(1)
+        colors_list.pop(1)
+
+    max_bin = 51 if 'BDI' in bdi_col else 26
+    bins = np.arange(0, max_bin, step=bin_step)
+    xtcks = ([0, 10, 20, 30, 40, 50] if 'BDI' in bdi_col
+             else [0, 5, 10, 15, 20, 25])
+
     # gridspec_kw=dict(height_ratios=[0.8, 0.2]))
     fig, ax = plt.subplots(figsize=(5, 4.5))
     if not isinstance(ax, (list, tuple, np.ndarray)):
         ax = [ax]
 
     plt.sca(ax[0])
-    bins = np.arange(0, 51, step=5)
-    plt.hist([hc1, hc2, hc3, diag], bins, stacked=True,
-             color=[colors['hc'], colors['mid'], colors['subdiag'],
-                    colors['diag']])
+
+    plt.hist(data, bins, stacked=True, color=colors_list)
     plt.yticks([0, 5, 10, 15, 20, 25], fontsize=16)
     plt.ylabel('Number of participants', fontsize=23)
-    plt.xticks([0, 10, 20, 30, 40, 50], fontsize=16)
+    plt.xticks(xtcks, fontsize=16)
     plt.xlabel(bdi_col, fontsize=23)
-    ax[0].set_xlim((0, 50))
+    ax[0].set_xlim((0, xtcks[-1]))
     ax[0].set_ylim((0, 28))
-    return fig, ax
+    return fig, ax[0]
 
 
 def plot_panel(bdi, bar_h=0.6, seed=22):
