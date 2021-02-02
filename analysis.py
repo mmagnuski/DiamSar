@@ -412,14 +412,31 @@ def summarize_stats_pairs(reduce_columns=True, stat_dir='stats',
             df.loc[idx, stat_summary[stat_col]] = t
             df.loc[idx, stat_summary[stat_col + 1]] = p
 
-            if 'vs' in contrast:
+            if 'vs' in contrast and not confounds:
                 psd_high, psd_low, ch_names = (data['hi'], data['lo'],
                                                data['ch_names'])
                 esci = esci_indep_cohens_d(psd_high[:, ch_idx],
                                            psd_low[:, ch_idx])
             else:
-                psd_sel, bdi_sel, ch_names = loaded
-                esci = esci_regression_r(psd_sel[:, ch_idx], bdi_sel)
+                psd_sel, bdi_sel, ch_names = (data['hilo'], data['bdi'],
+                                              data['ch_names'])
+
+                if 'vs' in contrast:
+                    onechan = psd_sel[:, [ch_idx]]
+                    beh = data['bdi']
+                    grp1 = beh[:, -1] == beh[0, -1]
+                    data1 = np.concatenate([onechan[grp1, :], beh[grp1, :]],
+                                           axis=1)
+                    data2 = np.concatenate([onechan[~grp1, :], beh[~grp1, :]],
+                                           axis=1)
+                    esci = esci_indep_cohens_d(data1, data2, n_boot=5000,
+                                               has_preds=True)
+                else:
+                    if confounds:
+                        beh = data['bdi']
+                        esci = esci_regression_r(beh, psd_sel[:, ch_idx])
+                    else:
+                        esci = esci_regression_r(bdi_sel, psd_sel[:, ch_idx])
 
             df.loc[idx, stat_summary[stat_col + 2]] = esci['es']
             df.loc[idx, stat_summary[stat_col + 3]] = esci['ci']
@@ -466,7 +483,7 @@ def esci_indep_cohens_d(data1, data2, n_boot=5000, has_preds=False):
         * ``stats['ci']`` contains 95% confidence interval for the effect size.
         * ``stats['bootstraps']`` contains bootstrap effect size values.
     '''
-    if has_preds is None:
+    if not has_preds:
         assert data2 is not None
         import dabest
         df = utils.psd_to_df(data1, data2)
@@ -488,7 +505,7 @@ def esci_indep_cohens_d(data1, data2, n_boot=5000, has_preds=False):
 
         cohen_d = regression_Cohens_d(data1, data2)
         cohen_d_ci, bootstraps = boot.ci((data1, data2), regression_Cohens_d,
-                                         multi=True, n_samples=n_boot,
+                                         multi='independent', n_samples=n_boot,
                                          return_dist=True)
     stats = dict(es=cohen_d, ci=cohen_d_ci, bootstraps=bootstraps)
     return stats
@@ -501,9 +518,12 @@ def esci_regression_r(x, y, n_boot=5000):
     Parameters
     ----------
     x : np.ndarray
-        One dimensional array of values for the correlation.
+        Predictors - one or two-dimensional array of values for the
+        correlation. If predictors are two-dimensional the last column is
+        treated as the predictor of interest and the rest as confounds.
     y : np.ndarray
-        One dimensional array of values for the correlation.
+        Dependent variable. One dimensional array of values for the
+        correlation.
     n_boot : int
         Number of bootstraps to use.
 
@@ -519,22 +539,27 @@ def esci_regression_r(x, y, n_boot=5000):
     from scipy.stats import pearsonr
     import scikits.bootstrap as boot
 
-    def corr(x, y):
-        return pearsonr(x, y)[0]
+    stats = dict()
+
+    if x.ndim == 1:
+        # normal correlation
+        def corr(x, y):
+            return pearsonr(x, y)[0]
+    else:
+        from borsar.stats import compute_regression_t
+        # we use regression t value and then turn it to r
+        def corr(x, y):
+            tvals = compute_regression_t(y[:, np.newaxis], x)
+            return r_from_t(tvals[-1, 0], x)
 
     r = corr(x, y)
-    stats = dict(es=r)
-    try:
-        # currently this is available only on my branch of scikits-bootstrap
-        # but I'll prepare a PR to the github repo, and it will be available
-        # when/if it gets accepted
-        r_ci, bootstraps = boot.ci((x, y), corr, multi=True, n_samples=n_boot,
-                                   return_dist=True)
-        stats.update(bootstraps=bootstraps)
-    except TypeError:
-        # branch of boot.ci with return_dist not available, use normal boot:
-        r_ci = boot.ci((x, y), corr, multi=True, n_samples=n_boot)
-    stats.update(ci=r_ci)
+    # currently this is available only on my branch of scikits-bootstrap
+    # but I'll prepare a PR to the github repo, and it will be available
+    # when/if it gets accepted
+    r_ci, bootstraps = boot.ci((x, y), corr, multi=True, n_samples=n_boot,
+                               return_dist=True)
+    stats.update(bootstraps=bootstraps)
+    stats.update(es=r, ci=r_ci)
     return stats
 
 
@@ -793,8 +818,8 @@ def save_stat(stat, save_dir='stats'):
 
 # TODO: add option to read source space Clusters
 def load_stat(fname=None, study='C', eyes='closed', space='avg',
-              contrast='cvsd', selection='asy_frontal', freq_range=(8, 13),
-              avg_freq=True, transform='log', div_by_sum=False,
+              contrast='cvsd', selection=None, freq_range=(8, 13),
+              avg_freq=None, transform=None, div_by_sum=False,
               stat_dir=None):
     '''Read previously saved analysis result.
 
@@ -814,15 +839,26 @@ def load_stat(fname=None, study='C', eyes='closed', space='avg',
 
     # if fname is not specified, construct
     if fname is None:
+        import re
         stat_dir = 'stats' if stat_dir is None else stat_dir
-        fname = ('stat_study-{}_eyes-{}_space-{}_contrast-{}_selection-{}'
-                 '_freqrange-{}_avgfreq-{}_transform-{}_divbysum-{}.hdf5')
+        fname = (r'stat_study-{}_eyes-{}_space-{}_contrast-{}_selection-{}'
+                  '_freqrange-{}_avgfreq-{}_transform-{}_divbysum-{}')
         vars = [study, eyes, space, contrast, selection, freq_range,
                 avg_freq, transform, div_by_sum]
-        fname = fname.format(*vars)
+        vars = ['.+' if v is None else v for v in vars]
+
+        ptrn = fname.format(*vars)
+        ptrn = ptrn.replace('(', '\\(').replace(')', '\\)')
         stat_dir = op.join(pth.paths.get_path('main', 'C'), 'analysis',
                            stat_dir)
-        fname = op.join(stat_dir, fname)
+        fls = os.listdir(stat_dir)
+        ok_files = [f for f in fls if len(re.findall(ptrn, f)) > 0]
+        if len(ok_files) == 0:
+            raise FileNotFoundError('Could not find requested file.')
+        elif len(ok_files) > 1:
+            raise ValueError('Multiple files match your description:\n'
+                             + ',\n'.join(ok_files))
+        fname = op.join(stat_dir, ok_files[0])
 
     return _load_stat(fname)
 
@@ -874,11 +910,35 @@ def sort_clst_channels(clst):
 
 
 def d_from_t_categorical(tvalue, preds):
+    '''Calculating Cohen's d from regression t value for categorical predictor.
+
+    reference
+    ---------
+    Nakagawa, S., & Cuthill, I. C. (2007). Effect size, confidence interval
+    and statistical significance: a practical guide for biologists.
+    Biological Reviews of the Cambridge Philosophical Society, 82(4), 591–605.
+    '''
     n_obs, n_preds = preds.shape
-    df = n_obs - n_preds
+    df = n_obs - n_preds - 1  # -1 because we assume intercept is not provided
     categ = preds[:, -1]
     values, counts = np.unique(categ, return_counts=True)
     assert len(values) == 2
     n1, n2 = counts
     d = tvalue * (n1 + n2) / (np.sqrt(n1 * n2) * np.sqrt(df))
     return d
+
+
+def r_from_t(tvalue, preds):
+    '''Calculating r correlation coeffiecient from regression t value for
+    continuous predictor. This is known as partial correlation coefficient
+    when there is more than one predictor.
+
+    reference
+    ---------
+    Nakagawa, S., & Cuthill, I. C. (2007). Effect size, confidence interval
+    and statistical significance: a practical guide for biologists.
+    Biological Reviews of the Cambridge Philosophical Society, 82(4), 591–605.
+    '''
+    # -1 because we assume intercept is not provided in the preds
+    df = np.diff(preds.shape[::-1])[0] - 1
+    return tvalue / np.sqrt(tvalue ** 2 + df)
