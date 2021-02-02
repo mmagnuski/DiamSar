@@ -4,17 +4,19 @@ import numpy as np
 import pandas as pd
 from scipy import sparse
 
+import mne
 from borsar.cluster import construct_adjacency_matrix
 
 from . import pth
 from . import utils
-from .freq import format_psds, get_psds
+from .freq import format_psds
 
 
 def run_analysis(study='C', contrast='cvsd', eyes='closed', space='avg',
                  freq_range=(8, 13), avg_freq=True, selection='frontal_asy',
                  div_by_sum=False, transform='log', n_permutations=10000,
-                 cluster_p_threshold=0.05, verbose=True):
+                 cluster_p_threshold=0.05, confounds=False, return_data=False,
+                 verbose=True):
     '''Run DiamSar analysis with specified parameters.
 
     Parameters
@@ -112,6 +114,14 @@ def run_analysis(study='C', contrast='cvsd', eyes='closed', space='avg',
         test. ``10000`` by default.
     cluster_p_threshold : float, optional
         Cluster entry p value threshold. ``0.05`` by default.
+    confounds : bool
+        Whether to include potential confounds in the analysis. These include:
+        sex, age and education (if they are available for given study). This
+        option works only when full behavioral data are available
+        (``paths.get_data('bdi', full_table=True)``), so it may not work for
+        some of the datasets I - III hosted on Dryad (Dryad does not allow
+        more than 3 variables per participant to avoid the possibility of
+        individual identification).
     verbose : bool | int
         Verbosity level supported by mne-python. ``True`` by default.
 
@@ -130,11 +140,10 @@ def run_analysis(study='C', contrast='cvsd', eyes='closed', space='avg',
                      div_by_sum=div_by_sum)
 
     # load relevant data
-    bdi = pth.paths.get_data('bdi', study=study)
+    bdi = pth.paths.get_data('bdi', study=study, full_table=confounds)
     psds, freq, ch_names, subj_id = pth.paths.get_data(
         'psd', study=study, eyes=eyes, space=space)
 
-    # TODO - re-save psds without nan-subjects?
     # select only subjects without NaNs
     no_nans = ~np.any(np.isnan(psds), axis=(1, 2))
     if not np.all(no_nans):
@@ -162,15 +171,60 @@ def run_analysis(study='C', contrast='cvsd', eyes='closed', space='avg',
         psd = psd.transpose((0, 2, 1))
 
     # group psds by chosen contrast
-    grp = utils.group_bdi(subj_id, bdi, method=contrast)
-    if 'reg' not in contrast:
-        hi, lo = psd[grp['high']], psd[grp['low']]
-        stat_info.update(dict(N_low=lo.shape[0], N_high=hi.shape[0],
-                              N_all=lo.shape[0] + hi.shape[0]))
+    grp = utils.group_bdi(subj_id, bdi, method=contrast, full_table=confounds)
+
+    # create contrast-specific variables
+    if not confounds:
+        if 'reg' not in contrast:
+            hi, lo = psd[grp['high']], psd[grp['low']]
+            stat_info.update(dict(N_low=lo.shape[0], N_high=hi.shape[0],
+                                  N_all=lo.shape[0] + hi.shape[0]))
+        else:
+            bdi = grp['bdi']
+            hilo = psd[grp['selection']]
+            stat_info['N_all'] = grp['selection'].sum()
     else:
-        bdi = grp['bdi']
+        # we perform linear regression, where predictor of interest
+        # depends on the chosen contrast
         hilo = psd[grp['selection']]
-        stat_info['N_all'] = grp['selection'].sum()
+
+    # handle confounds
+    if confounds:
+        # we include confounds in the regression analysis
+        bdi, hilo = utils.recode_variables(grp['beh'], data=hilo,
+                                           use_bdi='reg' in contrast)
+        # calculate N
+        N_all = bdi.shape[0]
+        stat_info['N_all'] = N_all
+        if 'reg' not in contrast:
+            N_hi = (bdi['DIAGNOZA'] > 0).sum()
+            stat_info['N_high'] = N_hi
+            stat_info['N_low'] = N_all - N_hi
+        subj_id = bdi.index.values
+        bdi = bdi.values
+
+    if return_data:
+        data = dict(freq=freq, ch_names=ch_names, bdi=bdi, src=src,
+                    subj_id=subj_id, subject=subject,
+                    subjects_dir=subjects_dir)
+        if confounds or 'reg' in contrast:
+            data['hilo'] = hilo
+        else:
+            data['hi'] = hi
+            data['lo'] = lo
+
+        # pick info
+        # FIX - this could be done not in return_data, but before - for clusters
+        if 'pairs' not in selection:
+            if 'asy' in selection:
+                this_ch_names = [ch.split('-')[1] for ch in ch_names]
+                info = info.copy().pick_channels(this_ch_names, ordered=True)
+            else:
+                info = info.copy().pick_channels(ch_names, ordered=True)
+        else:
+            info = ch_names
+        data['info'] = info
+        return data
 
     # statistical analysis
     # --------------------
@@ -178,7 +232,7 @@ def run_analysis(study='C', contrast='cvsd', eyes='closed', space='avg',
         # cluster-based permutation tests for multiple comparisons
         stat_info.update(dict(cluster_p_threshold=cluster_p_threshold))
 
-        if 'vs' in contrast:
+        if 'vs' in contrast and not confounds:
             # t test in cluster-based permutation test
             from scipy.stats import t
             from sarna.stats import ttest_ind_welch_no_p
@@ -201,9 +255,11 @@ def run_analysis(study='C', contrast='cvsd', eyes='closed', space='avg',
         else:
             # regression in cluster-based permutation test
             from borsar.cluster import cluster_based_regression
-            stat, clusters, pval = cluster_based_regression(
-                hilo, bdi, n_permutations=n_permutations, adjacency=adjacency,
-                alpha_threshold=cluster_p_threshold)
+
+            args = dict(n_permutations=n_permutations, adjacency=adjacency,
+                        alpha_threshold=cluster_p_threshold, cluster_pred=-1)
+
+            stat, clusters, pval = cluster_based_regression(hilo, bdi, **args)
 
         # construct Clusters with stat_info in description
         return _construct_clusters(clusters, pval, stat, space, stat_info,
@@ -212,29 +268,24 @@ def run_analysis(study='C', contrast='cvsd', eyes='closed', space='avg',
     else:
         # for selected pairs (two channel pairs) we don't correct for
         # multiple comparisons:
-        if 'vs' in contrast:
+        if 'vs' in contrast and not confounds:
             from scipy.stats import t, ttest_ind
             stat, pval = ttest_ind(hi, lo, equal_var=False)
         else:
             from borsar.stats import compute_regression_t
             # compute regression and ignore intercept:
             stat, pval = compute_regression_t(hilo, bdi, return_p=True)
-            stat, pval = stat[1], pval[1]
+            stat, pval = stat[-1], pval[-1]
 
         stat_info.update(dict(stat=stat, pval=pval, ch_names=ch_names))
         return stat_info
 
 
-def summarize_stats(split=True, reduce_columns=True, stat_dir='stats'):
+def summarize_stats_clusters(reduce_columns=True, stat_dir='stats'):
     '''Summarize multiple analyses (saved in analysis dir) in a dataframe.
 
     Parameters
     ----------
-    split : bool
-        Whether to split the results into channel pairs analyses and
-        cluster-based analyses dataframes. If ``True`` returns two dataframes,
-        the first one with channel pair analyses and the second one with
-        cluster-based analyses. Defaults to ``True``.
     reduce_columns : bool
         Whether to remove columns with no variability from the output. Defaults
         to ``True``.
@@ -244,11 +295,8 @@ def summarize_stats(split=True, reduce_columns=True, stat_dir='stats'):
 
     Returns
     -------
-    df | df1, df2 (depending on ``split``) : pandas.DataFrame
-        Dataframe (or dataframes if ``split`` is ``True``) with summarized
-        DiamSar analyses. If ``split=True`` returns two dataframes,
-        the first one with channel pair analyses and the second one with
-        cluster-based analyses.
+    df : pandas.DataFrame
+        Dataframe with summarized DiamSar analyses.
     '''
     from mne.externals import h5io
 
@@ -260,68 +308,55 @@ def summarize_stats(split=True, reduce_columns=True, stat_dir='stats'):
     stat_params = ['study', 'contrast', 'space', 'N_low', 'N_high', 'N_all',
                    'eyes', 'selection', 'freq_range', 'avg_freq', 'transform',
                    'div_by_sum']
-    stat_summary = ['min t', 'max t', 'n clusters', 'min cluster p',
-                    'n signif clusters', 'n signif points',
-                    'largest cluster size']
+    stat_summary = ['min t', 'max t', 'n signif points', 'n clusters',
+                    'largest cluster size', 'min cluster p',
+                    'n signif clusters']
     df = pd.DataFrame(index=np.arange(1, n_stat + 1),
                       columns=stat_params + stat_summary)
 
-    for idx, fname in enumerate(stat_files, start=1):
+    row_idx = 0
+    for fname in stat_files:
         stat = h5io.read_hdf5(op.join(stat_dir, fname))
 
-        if 'description' in stat:
-            for col in stat_params:
-                df.loc[idx, col] = (stat['description'][col]
-                                    if col in stat['description'] else np.nan)
+        if 'description' not in stat:
+            continue
 
-            # summarize clusters
-            n_clst = (len(stat['clusters']) if stat['clusters']
-                      is not None else 0)
-            df.loc[idx, stat_summary[0]] = stat['stat'].min()
-            df.loc[idx, stat_summary[1]] = stat['stat'].max()
-            df.loc[idx, stat_summary[2]] = n_clst
-            df.loc[idx, stat_summary[3]] = (stat['pvals'].min()
-                                            if n_clst > 0 else np.nan)
-            df.loc[idx, stat_summary[4]] = ((stat['pvals'] < 0.05).sum()
-                                            if n_clst > 0 else 0)
-            df.loc[idx, stat_summary[5]] = (np.abs(stat['stat']) > 2.).sum()
-            df.loc[idx, stat_summary[6]] = (
-                max([c.sum() for c in stat['clusters']])
-                if n_clst > 0 else np.nan)
-        else:
-            for col in stat_params:
-                df.loc[idx, col] = stat[col] if col in stat else np.nan
+        row_idx += 1
+        for col in stat_params:
+            value = (stat['description'][col]
+                     if col in stat['description'] else np.nan)
+            if isinstance(value, (list, tuple, np.ndarray)):
+                value = str(value)
 
-            df.loc[idx, stat_summary[0]] = stat['stat'][0]
-            df.loc[idx, stat_summary[1]] = stat['stat'][1]
-            df.loc[idx, stat_summary[2]] = np.nan
-            df.loc[idx, stat_summary[3]] = stat['pval']
-            df.loc[idx, stat_summary[4]] = np.nan
-            df.loc[idx, stat_summary[5]] = (stat['pval'] < 0.05).sum()
-            df.loc[idx, stat_summary[6]] = np.nan
+            df.loc[row_idx, col] = value
 
-    # split into two dfs
-    if split:
-        pair_rows = df['selection'].str.contains('pairs').values
-        df1 = df.loc[pair_rows, :].reset_index(drop=True)
-        df2 = df.loc[~pair_rows, :].reset_index(drop=True)
+        # summarize clusters
+        n_clst = len(stat['clusters']) if stat['clusters'] is not None else 0
+
+        min_cluster_p = stat['pvals'].min() if n_clst > 0 else np.nan
+        n_below_thresh = (stat['pvals'] < 0.05).sum() if n_clst > 0 else 0
+        n_signif_points = stat['clusters'].sum() if n_clst > 0 else 0
+        largest_cluster = (max([c.sum() for c in stat['clusters']])
+                           if n_clst > 0 else np.nan)
+
+        df.loc[row_idx, 'min t'] = stat['stat'].min()
+        df.loc[row_idx, 'max t'] = stat['stat'].max()
+        df.loc[row_idx, 'n signif points'] = n_signif_points
+        df.loc[row_idx, 'n clusters'] = n_clst
+        df.loc[row_idx, 'min cluster p'] = min_cluster_p
+        df.loc[row_idx, 'n signif clusters'] = n_below_thresh
+        df.loc[row_idx, 'largest cluster size'] = largest_cluster
 
     # reduce columns
+    df = df.loc[:row_idx, :]
     if reduce_columns:
-        if split:
-            df1 = remove_columns_with_no_variability(df1)
-            df2 = remove_columns_with_no_variability(df2)
-        else:
-            df = remove_columns_with_no_variability(df)
+        df = remove_columns_with_no_variability(df)
 
-    if split:
-        return df1, df2
-    else:
-        return df
+    return utils.reformat_stat_table(df)
 
 
-def summarize_ch_pair_stats(reduce_columns=True, stat_dir='stats',
-                            progressbar='text'):
+def summarize_stats_pairs(reduce_columns=True, stat_dir='stats',
+                          confounds=False, progressbar='text'):
     '''Summarize multiple channel pair analyses (saved in analysis dir) in a
     dataframe.
 
@@ -366,8 +401,9 @@ def summarize_ch_pair_stats(reduce_columns=True, stat_dir='stats',
         # for ES and CI we need the original data:
         params = ['study', 'space', 'contrast']
         study, space, contrast = [stat[param] for param in params]
-        loaded = get_psds(selection='asy_pairs', study=study,
-                          space=space, contrast=contrast)
+        data = run_analysis(selection='asy_pairs', study=study,
+                            space=space, contrast=contrast,
+                            confounds=confounds, return_data=True)
 
         # add stats
         for ch_idx in range(2):
@@ -376,13 +412,31 @@ def summarize_ch_pair_stats(reduce_columns=True, stat_dir='stats',
             df.loc[idx, stat_summary[stat_col]] = t
             df.loc[idx, stat_summary[stat_col + 1]] = p
 
-            if 'vs' in contrast:
-                psd_high, psd_low, ch_names = loaded
+            if 'vs' in contrast and not confounds:
+                psd_high, psd_low, ch_names = (data['hi'], data['lo'],
+                                               data['ch_names'])
                 esci = esci_indep_cohens_d(psd_high[:, ch_idx],
                                            psd_low[:, ch_idx])
             else:
-                psd_sel, info_sel, bdi_sel = loaded
-                esci = esci_regression_r(psd_sel[:, ch_idx], bdi_sel)
+                psd_sel, bdi_sel, ch_names = (data['hilo'], data['bdi'],
+                                              data['ch_names'])
+
+                if 'vs' in contrast:
+                    onechan = psd_sel[:, [ch_idx]]
+                    beh = data['bdi']
+                    grp1 = beh[:, -1] == beh[0, -1]
+                    data1 = np.concatenate([onechan[grp1, :], beh[grp1, :]],
+                                           axis=1)
+                    data2 = np.concatenate([onechan[~grp1, :], beh[~grp1, :]],
+                                           axis=1)
+                    esci = esci_indep_cohens_d(data1, data2, n_boot=5000,
+                                               has_preds=True)
+                else:
+                    if confounds:
+                        beh = data['bdi']
+                        esci = esci_regression_r(beh, psd_sel[:, ch_idx])
+                    else:
+                        esci = esci_regression_r(bdi_sel, psd_sel[:, ch_idx])
 
             df.loc[idx, stat_summary[stat_col + 2]] = esci['es']
             df.loc[idx, stat_summary[stat_col + 3]] = esci['ci']
@@ -400,7 +454,7 @@ def summarize_ch_pair_stats(reduce_columns=True, stat_dir='stats',
     return df
 
 
-def esci_indep_cohens_d(data1, data2, n_boot=5000):
+def esci_indep_cohens_d(data1, data2, n_boot=5000, has_preds=False):
     '''Compute Cohen's d effect size and its bootstrap 95% confidence interval.
     (using bias corrected accelerated bootstrap).
 
@@ -414,6 +468,12 @@ def esci_indep_cohens_d(data1, data2, n_boot=5000):
         healthy controls).
     n_boot : int
         Number of bootstraps to use.
+    has_preds : bool
+        Wheter array of predictors is provided in the data. If so the first
+        column of data1 and data2 are data for separate groups and the
+        following columns are the predictors used in regression with the
+        predictor of interest (group membership) being the last one
+        and the rest treated as confounds.
 
     Returns
     -------
@@ -423,14 +483,30 @@ def esci_indep_cohens_d(data1, data2, n_boot=5000):
         * ``stats['ci']`` contains 95% confidence interval for the effect size.
         * ``stats['bootstraps']`` contains bootstrap effect size values.
     '''
-    import dabest
-    df = utils.psd_to_df(data1, data2)
-    dbst_set = dabest.load(df, idx=("controls", "diagnosed"),
-                           x="group", y="FAA", resamples=n_boot)
-    results = dbst_set.cohens_d.results
-    cohen_d = results.difference.values[0]
-    cohen_d_ci = (results.bca_low.values[0], results.bca_high.values[0])
-    bootstraps = results.bootstraps[0]
+    if not has_preds:
+        assert data2 is not None
+        import dabest
+        df = utils.psd_to_df(data1, data2)
+        dbst_set = dabest.load(df, idx=("controls", "diagnosed"),
+                               x="group", y="FAA", resamples=n_boot)
+        results = dbst_set.cohens_d.results
+        cohen_d = results.difference.values[0]
+        cohen_d_ci = (results.bca_low.values[0], results.bca_high.values[0])
+        bootstraps = results.bootstraps[0]
+    else:
+        from borsar.stats import compute_regression_t
+        import scikits.bootstrap as boot
+
+        def regression_Cohens_d(data1, data2):
+            data = np.concatenate([data1, data2], axis=0)
+            preds = data[:, 1:]
+            tvals = compute_regression_t(data[:, [0]], preds)
+            return d_from_t_categorical(tvals[-1, 0], preds)
+
+        cohen_d = regression_Cohens_d(data1, data2)
+        cohen_d_ci, bootstraps = boot.ci((data1, data2), regression_Cohens_d,
+                                         multi='independent', n_samples=n_boot,
+                                         return_dist=True)
     stats = dict(es=cohen_d, ci=cohen_d_ci, bootstraps=bootstraps)
     return stats
 
@@ -442,9 +518,12 @@ def esci_regression_r(x, y, n_boot=5000):
     Parameters
     ----------
     x : np.ndarray
-        One dimensional array of values for the correlation.
+        Predictors - one or two-dimensional array of values for the
+        correlation. If predictors are two-dimensional the last column is
+        treated as the predictor of interest and the rest as confounds.
     y : np.ndarray
-        One dimensional array of values for the correlation.
+        Dependent variable. One dimensional array of values for the
+        correlation.
     n_boot : int
         Number of bootstraps to use.
 
@@ -460,23 +539,27 @@ def esci_regression_r(x, y, n_boot=5000):
     from scipy.stats import pearsonr
     import scikits.bootstrap as boot
 
-    def corr(x, y):
-        return pearsonr(x, y)[0]
+    stats = dict()
+
+    if x.ndim == 1:
+        # normal correlation
+        def corr(x, y):
+            return pearsonr(x, y)[0]
+    else:
+        from borsar.stats import compute_regression_t
+        # we use regression t value and then turn it to r
+        def corr(x, y):
+            tvals = compute_regression_t(y[:, np.newaxis], x)
+            return r_from_t(tvals[-1, 0], x)
 
     r = corr(x, y)
-    stats = dict(es=r)
-    try:
-        # currently this is available only on my branch of scikits-bootstrap
-        # but I'll prepare a PR to the github repo, and it will be available
-        # when/if it gets accepted
-        r_ci, bootstraps = boot.ci((x, y), corr, multi=True, n_samples=n_boot,
-                                   return_dist=True)
-        stats.update(bootstraps=bootstraps)
-    except TypeError:
-        # branch of boot.ci with return_dist not available, use normal boot:
-        print('Oh no!')
-        r_ci = boot.ci((x, y), corr, multi=True, n_samples=n_boot)
-    stats.update(ci=r_ci)
+    # currently this is available only on my branch of scikits-bootstrap
+    # but I'll prepare a PR to the github repo, and it will be available
+    # when/if it gets accepted
+    r_ci, bootstraps = boot.ci((x, y), corr, multi=True, n_samples=n_boot,
+                               return_dist=True)
+    stats.update(bootstraps=bootstraps)
+    stats.update(es=r, ci=r_ci)
     return stats
 
 
@@ -506,7 +589,7 @@ def list_analyses(study=list('ABCDE'), contrast=['cvsc', 'cvsd', 'creg',
                   'cdreg', 'dreg'], eyes=['closed'], space=['avg', 'csd',
                   'src'], freq_range=[(8, 13)], avg_freq=[True, False],
                   selection=['asy_frontal', 'asy_pairs', 'all'],
-                  transform=['log'], verbose=True):
+                  transform=['log'], confounds=[False], verbose=True):
     '''
     List all possible analyses for given set of parameter options.
     For explanation of the arguments see ``DiamSar.analysis.run_analysis``.
@@ -524,14 +607,14 @@ def list_analyses(study=list('ABCDE'), contrast=['cvsc', 'cvsd', 'creg',
 
     from itertools import product
     prod = list(product(study, contrast, eyes, space, freq_range, avg_freq,
-                        selection, transform))
+                        selection, transform, confounds))
 
     if verbose:
         all_combinations = len(prod)
         print('All analysis combinations: {:d}'.format(all_combinations))
 
     good_analyses = list()
-    for std, cntr, eye, spc, frqrng, avgfrq, sel, trnsf in prod:
+    for std, cntr, eye, spc, frqrng, avgfrq, sel, trnsf, conf in prod:
         # averaging alpha frequency range is ommited only for wide frequency
         # range
         if not avgfrq and not frqrng == (8, 13):
@@ -558,15 +641,13 @@ def list_analyses(study=list('ABCDE'), contrast=['cvsc', 'cvsd', 'creg',
         # study B does not have a diagnosed group
         if std == 'B' and cntr in ['cdreg', 'cvsd', 'dreg']:
             continue
-        # study A has controls only with low BDI
-        if std == 'A' and cntr in ['cvsc', 'creg', 'cdreg']:
-            continue
-        # study E did not measure BDI
-        if std == 'E' and not cntr == 'cvsd':
+        # studies A and E has controls only with low BDI (no subclinical)
+        if std in ['A', 'E'] and cntr in ['cvsc', 'creg']:
             continue
 
         # else: good analysis
-        good_analyses.append((std, cntr, eye, spc, frqrng, avgfrq, sel, trnsf))
+        good_analyses.append((std, cntr, eye, spc, frqrng, avgfrq, sel, trnsf,
+                              conf))
 
     if verbose:
         reduced = len(good_analyses)
@@ -577,9 +658,10 @@ def list_analyses(study=list('ABCDE'), contrast=['cvsc', 'cvsd', 'creg',
 
 def run_many(study=list('ABC'), contrast=['cvsc', 'cvsd', 'creg', 'cdreg',
              'dreg'], eyes=['closed'], space=['avg', 'csd', 'src'],
-             freq_range=[(8, 13)], avg_freq=[True, False],
+             freq_range=[(8, 13)], avg_freq=[True, False], confounds=False,
              selection=['asy_frontal', 'asy_pairs', 'all'], transform=['log'],
-             analyses=None, progressbar='notebook', save_dir='stats'):
+             analyses=None, n_permutations=10_000, progressbar='notebook',
+             save_dir='stats'):
     '''
     Run multiple analyses parametrized by combinations of options given in
     arguments.
@@ -592,31 +674,34 @@ def run_many(study=list('ABC'), contrast=['cvsc', 'cvsd', 'creg', 'cdreg',
     pass the analyses via the ``analyses`` keyword argument. The analyses
     have to be in the format used by ``DiamSar.analysis.list_analyses``:
     list of (study, contrast, eyes, space, freq_range, avg_freq, selection,
-    transform) tuples.
+    transform, confounds) tuples.
     '''
     from borsar.utils import silent_mne
     from DiamSar.utils import progressbar as pbarobj
 
     if analyses is None:
         analyses = list_analyses(study, contrast, eyes, space, freq_range,
-                                 avg_freq, selection, transform)
+                                 avg_freq, selection, transform, confounds)
 
     pbar = pbarobj(progressbar, len(analyses))
-    for std, cntr, eys, spc, frqrng, avgfrq, sel, trnsf in analyses:
+    for std, cntr, eys, spc, frqrng, avgfrq, sel, trnsf, conf in analyses:
         with silent_mne(full_silence=True):
             stat = run_analysis(study=std, contrast=cntr, eyes=eys, space=spc,
                                 freq_range=frqrng, avg_freq=avgfrq,
-                                selection=sel, transform=trnsf, verbose=False)
+                                selection=sel, transform=trnsf, confounds=conf,
+                                n_permutations=n_permutations, verbose=False)
             save_stat(stat, save_dir=save_dir)
         pbar.update(1)
     pbar.update(1)
+    pbar.close()
 
 
 def analyses_to_df(analyses):
     '''Turn list of tuples with analysis parameters to dataframe
     representation.'''
     df = pd.DataFrame(columns=['study', 'contrast', 'eyes', 'space', 'freq',
-                               'avg_freq', 'selection', 'transform'])
+                               'avg_freq', 'selection', 'transform',
+                               'confounds'])
     for idx, analysis in enumerate(analyses):
         if isinstance(analysis[4], (list, tuple)):
             analysis = list(analysis)
@@ -733,8 +818,8 @@ def save_stat(stat, save_dir='stats'):
 
 # TODO: add option to read source space Clusters
 def load_stat(fname=None, study='C', eyes='closed', space='avg',
-              contrast='cvsd', selection='asy_frontal', freq_range=(8, 13),
-              avg_freq=True, transform='log', div_by_sum=False,
+              contrast='cvsd', selection=None, freq_range=(8, 13),
+              avg_freq=None, transform=None, div_by_sum=False,
               stat_dir=None):
     '''Read previously saved analysis result.
 
@@ -754,15 +839,26 @@ def load_stat(fname=None, study='C', eyes='closed', space='avg',
 
     # if fname is not specified, construct
     if fname is None:
+        import re
         stat_dir = 'stats' if stat_dir is None else stat_dir
-        fname = ('stat_study-{}_eyes-{}_space-{}_contrast-{}_selection-{}'
-                 '_freqrange-{}_avgfreq-{}_transform-{}_divbysum-{}.hdf5')
+        fname = (r'stat_study-{}_eyes-{}_space-{}_contrast-{}_selection-{}'
+                  '_freqrange-{}_avgfreq-{}_transform-{}_divbysum-{}')
         vars = [study, eyes, space, contrast, selection, freq_range,
                 avg_freq, transform, div_by_sum]
-        fname = fname.format(*vars)
+        vars = ['.+' if v is None else v for v in vars]
+
+        ptrn = fname.format(*vars)
+        ptrn = ptrn.replace('(', '\\(').replace(')', '\\)')
         stat_dir = op.join(pth.paths.get_path('main', 'C'), 'analysis',
                            stat_dir)
-        fname = op.join(stat_dir, fname)
+        fls = os.listdir(stat_dir)
+        ok_files = [f for f in fls if len(re.findall(ptrn, f)) > 0]
+        if len(ok_files) == 0:
+            raise FileNotFoundError('Could not find requested file.')
+        elif len(ok_files) > 1:
+            raise ValueError('Multiple files match your description:\n'
+                             + ',\n'.join(ok_files))
+        fname = op.join(stat_dir, ok_files[0])
 
     return _load_stat(fname)
 
@@ -811,3 +907,38 @@ def sort_clst_channels(clst):
         clst.clusters = clst.clusters[:, sorting]
     clst.dimcoords[0] = np.array(clst.dimcoords[0])[sorting].tolist()
     return clst
+
+
+def d_from_t_categorical(tvalue, preds):
+    '''Calculating Cohen's d from regression t value for categorical predictor.
+
+    reference
+    ---------
+    Nakagawa, S., & Cuthill, I. C. (2007). Effect size, confidence interval
+    and statistical significance: a practical guide for biologists.
+    Biological Reviews of the Cambridge Philosophical Society, 82(4), 591–605.
+    '''
+    n_obs, n_preds = preds.shape
+    df = n_obs - n_preds - 1  # -1 because we assume intercept is not provided
+    categ = preds[:, -1]
+    values, counts = np.unique(categ, return_counts=True)
+    assert len(values) == 2
+    n1, n2 = counts
+    d = tvalue * (n1 + n2) / (np.sqrt(n1 * n2) * np.sqrt(df))
+    return d
+
+
+def r_from_t(tvalue, preds):
+    '''Calculating r correlation coeffiecient from regression t value for
+    continuous predictor. This is known as partial correlation coefficient
+    when there is more than one predictor.
+
+    reference
+    ---------
+    Nakagawa, S., & Cuthill, I. C. (2007). Effect size, confidence interval
+    and statistical significance: a practical guide for biologists.
+    Biological Reviews of the Cambridge Philosophical Society, 82(4), 591–605.
+    '''
+    # -1 because we assume intercept is not provided in the preds
+    df = np.diff(preds.shape[::-1])[0] - 1
+    return tvalue / np.sqrt(tvalue ** 2 + df)

@@ -77,16 +77,29 @@ def read_bdi(paths, study='C', **kwargs):
     if study == 'B':
         if full_table:
             bdi = pd.read_excel(op.join(beh_dir, 'BAZA DANYCH.xlsx'))
-            sel_col = ['BDI 2-pomiar wynik', 'wykształcenie', 'wiek', 'płeć']
+            sel_col = ['nr osoby', 'BDI 2-pomiar wynik', 'wykształcenie',
+                       'wiek', 'płeć']
             sel_col = [col for col in sel_col if col in bdi.columns]
             bdi = bdi[sel_col]
 
+            # trim rows
+            idx = np.where(bdi['nr osoby'].isnull())[0][0]
+            bdi = bdi.iloc[:idx, :]
+
             # rename columns
-            rename_col = {'wiek': 'age', 'płeć': 'sex',
+            rename_col = {'wiek': 'age', 'płeć': 'sex', 'nr osoby': 'ID',
                           'BDI 2-pomiar wynik': 'BDI-I',
                           'wykształcenie': 'education'}
             bdi = bdi.rename(columns=rename_col)
-            # ! check ID with 'BDI.xlsx' !
+
+            # rename sex to female / male
+            bdi.loc[:, 'sex'] = bdi.sex.replace({'k': 'female', 'm': 'male'})
+
+            # missing values should be NaN
+            msk = bdi.loc[:, 'BDI-I'] == 'brak'
+            bdi.loc[msk, 'BDI-I'] = np.nan
+
+            bdi = bdi.infer_objects()
         else:
             bdi = pd.read_excel(op.join(beh_dir, 'BDI.xlsx'), header=None,
                                 names=['ID', 'BDI-I'])
@@ -94,6 +107,10 @@ def read_bdi(paths, study='C', **kwargs):
 
     if study == 'C':
         df = pd.read_excel(op.join(beh_dir, 'BAZA_DANYCH.xlsx'))
+        first_null = np.where(df.ID.isnull())[0]
+        if len(first_null) > 0:
+            first_null = first_null[0]
+            df = df.iloc[:first_null, :]
         if full_table:
             bdi = study_C_reformat_original_beh_table(df)
         else:
@@ -122,9 +139,9 @@ def read_bdi(paths, study='C', **kwargs):
         bdi = bdi.rename(columns=rename_col)
 
     if study == 'E':
-        fname = ('subjects_information_EEG_128channels_resting_'
-                 'lanzhou_2015.xlsx')
-        bdi = pd.read_excel(op.join(beh_dir, fname))
+        # original database name is 'subjects_information_EEG_128channels_
+        # resting_lanzhou_2015.xlsx'
+        bdi = pd.read_excel(op.join(beh_dir, 'database_MODMA.xlsx'))
         bdi.loc[:, 'DIAGNOZA'] = bdi.type == 'MDD'
         sel_col = ['subject id', 'DIAGNOZA', 'PHQ-9']
 
@@ -143,37 +160,44 @@ def read_bdi(paths, study='C', **kwargs):
 
 def study_C_reformat_original_beh_table(df):
     '''Select and recode relevant columns from behavioral table.
-
-    This function is not used in "Three times NO" paper.
     '''
     # select relevant columns
-    df = df[['ID', 'DATA BADANIA', 'WIEK', 'PŁEĆ', 'WYKSZTAŁCENIE',
-             'DIAGNOZA', 'BDI-II']]
+    df = df.loc[:, ['ID', 'DATA BADANIA', 'WIEK', 'PŁEĆ', 'WYKSZTAŁCENIE',
+                    'DIAGNOZA', 'BDI-II']]
 
     # fix dates
     df.loc[0, 'DATA BADANIA'] = df.loc[1, 'DATA BADANIA']
     df.loc[7, 'WIEK'] = datetime.datetime(df.loc[7, 'WIEK'], 6, 25)
     df.loc[21, 'WIEK'] = datetime.datetime(df.loc[21, 'WIEK'], 6, 25)
 
-    # age
-    # ---
-    # calculate age
-    for idx in df.index:
-        delta = relativedelta(df.loc[idx, 'DATA BADANIA'], df.loc[idx, 'WIEK'])
-        df.loc[idx, 'wiek'] = delta.years
+    # silence false alarm SettingWithCopyWarnings:
+    with warnings.catch_warnings():
+        irritating_warning = pd.core.common.SettingWithCopyWarning
+        warnings.simplefilter('ignore', irritating_warning)
 
-    # one bad birth date (the same as study date) - use average
-    # student age (participant was a student)
-    avg_student_age = df.query('WYKSZTAŁCENIE == "Student"').wiek.mean()
-    df.loc[9, 'wiek'] = int(avg_student_age)
+        # age
+        # ---
+        for idx in df.index:
+            delta = relativedelta(df.loc[idx, 'DATA BADANIA'],
+                                  df.loc[idx, 'WIEK'])
+            df.loc[idx, 'age'] = delta.years
 
-    # education
-    # ---------
-    # fix one missing education - insert most common answer
-    df.loc[85, 'WYKSZTAŁCENIE'] = 'Średnie'
+        # one bad birth date (the same as study date) - use average
+        # student age (participant was a student)
+        avg_student_age = df.query('WYKSZTAŁCENIE == "Student"').age.mean()
+        df.loc[9, 'age'] = int(avg_student_age)
 
-    # remove 'DATA BADANIA' and 'WIEK'
-    bdi = df.drop(['DATA BADANIA', 'WIEK'], axis='columns')
+        # remove 'DATA BADANIA' and 'WIEK'
+        bdi = df.drop(['DATA BADANIA', 'WIEK'], axis='columns')
+
+        # rename columns
+        relabel = {'WYKSZTAŁCENIE': 'education', 'PŁEĆ': 'sex'}
+        bdi = bdi.rename(columns=relabel)
+
+        # translate płeć
+        relabel = {'KOBIETA': 'female', 'MĘŻCZYZNA': 'male'}
+        bdi.loc[:, 'sex'] = bdi.sex.replace(relabel)
+
     return bdi
 
 
