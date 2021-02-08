@@ -6,6 +6,7 @@ import datetime
 from dateutil.relativedelta import relativedelta
 
 import numpy as np
+from scipy import sparse
 import pandas as pd
 import mne
 
@@ -208,6 +209,275 @@ def make_sure_diagnosis_is_boolean(bdi):
         warnings.simplefilter('ignore', irritating_warning)
         bdi.loc[:, 'DIAGNOZA'] = bdi.DIAGNOZA.astype('bool')
     return bdi
+
+
+def prepare_data(paths, study='C', contrast='cvsd', eyes='closed', space='avg',
+                 freq_range=(8, 13), avg_freq=True, selection='frontal_asy',
+                 div_by_sum=False, transform='log', confounds=False,
+                 scale_psd=False, verbose=True):
+    '''Get and prepare data for analysis.
+
+    Parameters
+    ----------
+    study : str
+        Which study to use. Studies are coded with letters in the following
+        fashion:
+
+        =====   ============   ===============
+        study   study letter   study directory
+        =====   ============   ===============
+        I       A              Nowowiejska
+        II      B              Wronski
+        III     C              DiamSar
+        IV      D              PREDiCT
+        V       E              MODMA
+        =====   ============   ===============
+
+        Study ``'C'`` is used by default.
+    contrast : str
+        Statistical contrast to use. Contrasts are coded in the following
+        fashion:
+
+        ===========   =============   ===============================
+        contrast      contrast name   contrast description
+        ===========   =============   ===============================
+        ``'cvsd'``    DvsHC           diagnosed vs healthy controls
+        ``'cvsc'``    SvsHC           subclinical vs healthy controls
+        ``'dreg'``    DReg            linear relationship with BDI restricted
+        ``'dreg'``    DReg            linear relationship with BDI restricted
+                                      to depressed individuals.
+        ``'creg'``    nonDReg         linear relationship with BDI restricted
+                                      to non-depressed individuals.
+        ``'cdreg'``   allReg          linear relationship with BDI on all
+                                      participants.
+        ===========   =============   ===============================
+
+        Contrast ``'cvsd'`` is used by default. For more details on the BDI
+        thresholds used to create healthy controls and subclinical groups
+        see ``DiamSar.utils.group_bdi``.
+    eyes : str
+        Rest segment to use in the analysis:
+        * ``'closed'`` - eyes closed
+        * ``'open'`` - eyes open
+
+        Only study C has eyes open rest segments.
+    space : str
+        Space to use in the analysis:
+
+        ===========   =====================================================
+        space         description
+        ===========   =====================================================
+        ``'avg'``     channel space, average reference
+        ``'csd'``     channel space, Current Source Density (CSD) reference
+        ``'src'``     source space
+        ===========   =====================================================
+
+    freq_range : tuple
+        Lower and higher edge of the frequency space to include in the
+        analysis (in Hz). ``(8, 13)`` by default.
+    avg_freq : bool
+        whether to average the selected frequency range. ``True`` by default.
+    selection : str
+        Channels/sources to select.
+
+        =================   ==========================================
+        value               description
+        =================   ==========================================
+        ``'all'``           all channels
+        ``'frontal'``       all frontal channels
+        ``'frontal_asy'``   all frontal asymmetry channel pairs
+        ``'asy'``           all asymmetry channel pairs
+        ``'asy_pairs'``     two selected asymmetry channel pairs
+                            corresponding to F4-F3 and F8-F7
+        =================   ==========================================
+
+        Defaults to ``'frontal_asy'``.
+
+    div_by_sum : bool
+        Whether to divide R - L asymmetry by the sum (R + L).
+    transform : str | list of str
+        Transformation on the data:
+
+        ============   ==========================================
+        value          description
+        ============   ==========================================
+        ``'log'``      log-transform
+        ``'zscore'``   within-participant across-channels z-score
+        ============   ==========================================
+
+        You can also group transforms: ``['log', 'zscore']`` zscores the
+        log-transformed data. ``'log'`` is used by default.
+    confounds : bool
+        Whether to include potential confounds in the returned data. These
+        include: sex, age and education (if they are available for given
+        study). This option works only when full behavioral data are available
+        (``paths.get_data('bdi', full_table=True)``), so it may not work for
+        some of the datasets I - III hosted on Dryad (Dryad does not allow
+        more than 3 variables per participant to avoid the possibility of
+        individual identification).
+    scale_psd : bool
+        Whether to center and scale (z-score) the biological data (power
+        spectra). This step is done after asymmetry computation and
+        log-transform.
+    verbose : bool | int
+        Verbosity level supported by mne-python. ``True`` by default.
+
+    Returns
+    -------
+    data : dict
+        Dictionary of data.
+    '''
+    from .utils import group_bdi, recode_variables
+    from .freq import format_psds
+
+    data = dict()
+    # get base study name and setup stat_info dict
+    stat_info = dict(avg_freq=avg_freq, freq_range=freq_range,
+                     selection=selection, space=space, contrast=contrast,
+                     study=study, eyes=eyes, transform=transform,
+                     div_by_sum=div_by_sum)
+
+    # load relevant data
+    bdi = paths.get_data('bdi', study=study, full_table=confounds)
+    psds, freq, ch_names, subj_id = paths.get_data(
+        'psd', study=study, eyes=eyes, space=space)
+
+    # some src psds have spatial dimension last,
+    # while freq is assumed last in format psds
+    if space == 'src' and psds.shape[-1] > psds.shape[-2]:
+        psds = psds.transpose((0, 2, 1))
+
+    # select only subjects without NaNs
+    no_nans = ~np.any(np.isnan(psds), axis=(1, 2))
+    if not np.all(no_nans):
+        psds = psds[no_nans]
+        subj_id = subj_id[no_nans]
+
+    # get information about channel / source space
+    info, src, subject, subjects_dir = _get_space_info(
+        paths, study, space, ch_names, selection)
+
+    # prepare data
+    # ------------
+    # select regions, average frequencies, compute asymmetry
+    psd, freq, ch_names = format_psds(
+        psds, freq, info=info, freq_range=freq_range, average_freq=avg_freq,
+        selection=selection, transform=transform, div_by_sum=div_by_sum,
+        src=src, subjects_dir=subjects_dir, subject=subject)
+
+    if scale_psd:
+        # z-score across subjects
+        from scipy.stats import zscore
+        psd = zscore(psd, axis=0)
+
+    # construct adjacency matrix for clustering
+    adjacency = (_get_adjacency(paths, study, space, ch_names, selection, src)
+                 if 'pairs' not in selection else None)
+
+    # group psds by chosen contrast
+    grp = group_bdi(subj_id, bdi, method=contrast, full_table=confounds)
+
+    # TODO: put this in utils.group_data
+    # create contrast-specific variables
+    if not confounds:
+        if 'reg' not in contrast:
+            hi, lo = psd[grp['high']], psd[grp['low']]
+            stat_info.update(dict(N_low=lo.shape[0], N_high=hi.shape[0],
+                                  N_all=lo.shape[0] + hi.shape[0]))
+            data['hi'], data['lo'] = hi, lo
+        else:
+            bdi = grp['bdi']
+            hilo = psd[grp['selection']]
+            stat_info['N_all'] = grp['selection'].sum()
+            data['hilo'], data['bdi'] = hilo, bdi
+    else:
+        # we perform linear regression, where predictor of interest
+        # depends on the chosen contrast
+        hilo = psd[grp['selection']]
+
+        # we include confounds in the regression analysis
+        bdi, hilo = recode_variables(grp['beh'], data=hilo,
+                                     use_bdi='reg' in contrast)
+        # calculate N
+        N_all = bdi.shape[0]
+        stat_info['N_all'] = N_all
+        if 'reg' not in contrast:
+            N_hi = (bdi['DIAGNOZA'] > 0).sum()
+            stat_info['N_high'] = N_hi
+            stat_info['N_low'] = N_all - N_hi
+        subj_id = bdi.index.values
+        bdi = bdi.values
+
+        data['hilo'], data['bdi'] = hilo, bdi
+
+    # pick info
+    # FIX - this could be done not in return_data, but before - for clusters
+    if not space == 'src':
+        if 'asy' in selection:
+            this_ch_names = [ch.split('-')[1] for ch in ch_names]
+            info = info.copy().pick_channels(this_ch_names, ordered=True)
+        else:
+            info = info.copy().pick_channels(ch_names, ordered=True)
+    else:
+        info = None
+
+    data.update(dict(freq=freq, ch_names=ch_names, src=src, info=info,
+                     subj_id=subj_id, subject=subject, stat_info=stat_info,
+                     subjects_dir=subjects_dir, adjacency=adjacency))
+    return data
+
+
+def _get_space_info(paths, study, space, ch_names, selection):
+    '''Helper function for ``prepare_data``. Returns relevant source/channel
+    space along with additional variables.'''
+    if not space == 'src':
+        info = paths.get_data('info', study=study)
+        src, subjects_dir, subject = None, None, None
+
+        # check that channel order agrees between psds and info
+        msg = 'Channel order does not agree between psds and info object.'
+        assert (np.array(ch_names) == np.array(info['ch_names'])).all(), msg
+    else:
+        # read fwd, get subjects_dir and subject
+        subjects_dir = paths.get_path('subjects_dir')
+        info = None
+        if 'asy' in selection:
+            src = paths.get_data('src_sym')
+            subject = 'fsaverage_sym'
+        else:
+            subject = 'fsaverage'
+            src = paths.get_data('fwd', study=study)['src']
+
+    return info, src, subject, subjects_dir
+
+
+def _get_adjacency(paths, study, space, ch_names, selection, src):
+    '''Helper function for ``prepare_data``. Returns adjacency for given study
+    and space.'''
+    if not space == 'src':
+        # use right-side channels in adjacency if we calculate asymmetry
+        if 'asy' in selection:
+            ch_names = [ch.split('-')[1] for ch in ch_names]
+        neighbours = paths.get_data('neighbours', study=study)
+        adjacency = construct_adjacency_matrix(
+            neighbours, ch_names, as_sparse=True)
+    else:
+        import mne
+        try:
+            adjacency = mne.spatial_src_connectivity(src)
+        except AttributeError:
+            adjacency = mne.spatial_src_adjacency(src)
+
+        if not selection == 'all':
+            if isinstance(ch_names, dict):
+                from .src import _to_data_vert
+                data_vert = _to_data_vert(src, ch_names)
+            else:
+                data_vert = ch_names
+            idx1, idx2 = np.ix_(data_vert, data_vert)
+            adjacency = sparse.coo_matrix(
+                adjacency.toarray()[idx1, idx2])
+    return adjacency
 
 
 def load_chanord(paths, study=None, **kwargs):

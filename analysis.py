@@ -2,21 +2,17 @@ import os
 import os.path as op
 import numpy as np
 import pandas as pd
-from scipy import sparse
 
 import mne
 from borsar.cluster import construct_adjacency_matrix
 
-from . import pth
-from . import utils
-from .freq import format_psds
+from . import pth, io, utils
 
 
 def run_analysis(study='C', contrast='cvsd', eyes='closed', space='avg',
                  freq_range=(8, 13), avg_freq=True, selection='frontal_asy',
                  div_by_sum=False, transform='log', n_permutations=10000,
-                 cluster_p_threshold=0.05, confounds=False, return_data=False,
-                 verbose=True):
+                 cluster_p_threshold=0.05, confounds=False, verbose=True):
     '''Run DiamSar analysis with specified parameters.
 
     Parameters
@@ -133,98 +129,34 @@ def run_analysis(study='C', contrast='cvsd', eyes='closed', space='avg',
         correct for multiple comparisons and a dictionary of results is
         returned for this contrast.
     '''
-    # get base study name and setup stat_info dict
-    stat_info = dict(avg_freq=avg_freq, freq_range=freq_range,
-                     selection=selection, space=space, contrast=contrast,
-                     study=study, eyes=eyes, transform=transform,
-                     div_by_sum=div_by_sum)
 
-    # load relevant data
-    bdi = pth.paths.get_data('bdi', study=study, full_table=confounds)
-    psds, freq, ch_names, subj_id = pth.paths.get_data(
-        'psd', study=study, eyes=eyes, space=space)
+    data = io.prepare_data(
+        pth.paths, study, contrast, eyes, space, freq_range, avg_freq,
+        selection, div_by_sum, transform, confounds, verbose)
+    return _conduct_analysis(data, contrast, space,avg_freq, selection,
+                             n_permutations, cluster_p_threshold, confounds,
+                             verbose)
 
-    # select only subjects without NaNs
-    no_nans = ~np.any(np.isnan(psds), axis=(1, 2))
-    if not np.all(no_nans):
-        psds = psds[no_nans]
-        subj_id = subj_id[no_nans]
 
-    info, src, subject, subjects_dir = _get_space_info(study, space, ch_names,
-                                                       selection)
-
-    # prepare data
-    # ------------
-
-    # select regions, average frequencies, compute asymmetry
-    psd, freq, ch_names = format_psds(
-        psds, freq, info=info, freq_range=freq_range, average_freq=avg_freq,
-        selection=selection, transform=transform, div_by_sum=div_by_sum,
-        src=src, subjects_dir=subjects_dir, subject=subject)
-
-    # construct adjacency matrix for clustering
-    if 'pairs' not in selection:
-        adjacency = _get_adjacency(study, space, ch_names, selection, src)
+def _conduct_analysis(data, contrast, space, avg_freq, selection,
+                      n_permutations, cluster_p_threshold, confounds, verbose):
+    '''Conduct analysis.'''
+    stat_info, adjacency = data['stat_info'], data['adjacency']
+    if 'vs' in contrast and not confounds:
+        hi, lo = data['hi'], data['lo']
+        psd_ndim = hi.ndim
+    else:
+        hilo = data['hilo']
+        bdi = data['bdi']
+        psd_ndim = hilo.ndim
 
     # put spatial dimension last for cluster-based test
-    if not avg_freq or psd.ndim == 3:
-        psd = psd.transpose((0, 2, 1))
-
-    # group psds by chosen contrast
-    grp = utils.group_bdi(subj_id, bdi, method=contrast, full_table=confounds)
-
-    # create contrast-specific variables
-    if not confounds:
-        if 'reg' not in contrast:
-            hi, lo = psd[grp['high']], psd[grp['low']]
-            stat_info.update(dict(N_low=lo.shape[0], N_high=hi.shape[0],
-                                  N_all=lo.shape[0] + hi.shape[0]))
+    if not avg_freq or psd_ndim == 3:
+        if 'hi' in data:
+            hi = hi.transpose((0, 2, 1))
+            lo = lo.transpose((0, 2, 1))
         else:
-            bdi = grp['bdi']
-            hilo = psd[grp['selection']]
-            stat_info['N_all'] = grp['selection'].sum()
-    else:
-        # we perform linear regression, where predictor of interest
-        # depends on the chosen contrast
-        hilo = psd[grp['selection']]
-
-    # handle confounds
-    if confounds:
-        # we include confounds in the regression analysis
-        bdi, hilo = utils.recode_variables(grp['beh'], data=hilo,
-                                           use_bdi='reg' in contrast)
-        # calculate N
-        N_all = bdi.shape[0]
-        stat_info['N_all'] = N_all
-        if 'reg' not in contrast:
-            N_hi = (bdi['DIAGNOZA'] > 0).sum()
-            stat_info['N_high'] = N_hi
-            stat_info['N_low'] = N_all - N_hi
-        subj_id = bdi.index.values
-        bdi = bdi.values
-
-    if return_data:
-        data = dict(freq=freq, ch_names=ch_names, bdi=bdi, src=src,
-                    subj_id=subj_id, subject=subject,
-                    subjects_dir=subjects_dir)
-        if confounds or 'reg' in contrast:
-            data['hilo'] = hilo
-        else:
-            data['hi'] = hi
-            data['lo'] = lo
-
-        # pick info
-        # FIX - this could be done not in return_data, but before - for clusters
-        if 'pairs' not in selection:
-            if 'asy' in selection:
-                this_ch_names = [ch.split('-')[1] for ch in ch_names]
-                info = info.copy().pick_channels(this_ch_names, ordered=True)
-            else:
-                info = info.copy().pick_channels(ch_names, ordered=True)
-        else:
-            info = ch_names
-        data['info'] = info
-        return data
+            hilo = hilo.transpose((0, 2, 1))
 
     # statistical analysis
     # --------------------
@@ -262,9 +194,10 @@ def run_analysis(study='C', contrast='cvsd', eyes='closed', space='avg',
             stat, clusters, pval = cluster_based_regression(hilo, bdi, **args)
 
         # construct Clusters with stat_info in description
-        return _construct_clusters(clusters, pval, stat, space, stat_info,
-                                   info, src, subjects_dir, subject,
-                                   ch_names, freq)
+        return _construct_clusters(
+            clusters, pval, stat, space, stat_info, data['info'], data['src'],
+            data['subjects_dir'], data['subject'], data['ch_names'],
+            data['freq'])
     else:
         # for selected pairs (two channel pairs) we don't correct for
         # multiple comparisons:
@@ -281,177 +214,65 @@ def run_analysis(study='C', contrast='cvsd', eyes='closed', space='avg',
         return stat_info
 
 
-def summarize_stats_clusters(reduce_columns=True, stat_dir='stats'):
-    '''Summarize multiple analyses (saved in analysis dir) in a dataframe.
-
-    Parameters
-    ----------
-    reduce_columns : bool
-        Whether to remove columns with no variability from the output. Defaults
-        to ``True``.
-    stat_dir : str
-        Subdirectory to use (``'stats'``, ``'add1'`` or ``'add2'``, unless
-        additional subdirectories were created).
-
-    Returns
-    -------
-    df : pandas.DataFrame
-        Dataframe with summarized DiamSar analyses.
+def _aggregate_studies(paths, space, contrast, selection='asy_pairs',
+                       confounds=False):
     '''
-    from mne.externals import h5io
+    Read all studies that include given contrast and aggregate their data.
 
-    stat_dir = op.join(pth.paths.get_path('main', 'C'), 'analysis', stat_dir)
-    stat_files = [f for f in os.listdir(stat_dir) if f.endswith('.hdf5')]
-    n_stat = len(stat_files)
-
-    # first, create an empty dataframe
-    stat_params = ['study', 'contrast', 'space', 'N_low', 'N_high', 'N_all',
-                   'eyes', 'selection', 'freq_range', 'avg_freq', 'transform',
-                   'div_by_sum']
-    stat_summary = ['min t', 'max t', 'n signif points', 'n clusters',
-                    'largest cluster size', 'min cluster p',
-                    'n signif clusters']
-    df = pd.DataFrame(index=np.arange(1, n_stat + 1),
-                      columns=stat_params + stat_summary)
-
-    row_idx = 0
-    for fname in stat_files:
-        stat = h5io.read_hdf5(op.join(stat_dir, fname))
-
-        if 'description' not in stat:
-            continue
-
-        row_idx += 1
-        for col in stat_params:
-            value = (stat['description'][col]
-                     if col in stat['description'] else np.nan)
-            if isinstance(value, (list, tuple, np.ndarray)):
-                value = str(value)
-
-            df.loc[row_idx, col] = value
-
-        # summarize clusters
-        n_clst = len(stat['clusters']) if stat['clusters'] is not None else 0
-
-        min_cluster_p = stat['pvals'].min() if n_clst > 0 else np.nan
-        n_below_thresh = (stat['pvals'] < 0.05).sum() if n_clst > 0 else 0
-        n_signif_points = stat['clusters'].sum() if n_clst > 0 else 0
-        largest_cluster = (max([c.sum() for c in stat['clusters']])
-                           if n_clst > 0 else np.nan)
-
-        df.loc[row_idx, 'min t'] = stat['stat'].min()
-        df.loc[row_idx, 'max t'] = stat['stat'].max()
-        df.loc[row_idx, 'n signif points'] = n_signif_points
-        df.loc[row_idx, 'n clusters'] = n_clst
-        df.loc[row_idx, 'min cluster p'] = min_cluster_p
-        df.loc[row_idx, 'n signif clusters'] = n_below_thresh
-        df.loc[row_idx, 'largest cluster size'] = largest_cluster
-
-    # reduce columns
-    df = df.loc[:row_idx, :]
-    if reduce_columns:
-        df = remove_columns_with_no_variability(df)
-
-    return utils.reformat_stat_table(df)
-
-
-def summarize_stats_pairs(reduce_columns=True, stat_dir='stats',
-                          confounds=False, progressbar='text'):
-    '''Summarize multiple channel pair analyses (saved in analysis dir) in a
-    dataframe.
-
-    This takes longer than ``summarize_stats`` because it adds effect sizes and
-    bootstrap confidence intervals for effect sizes.
-
-    Parameters
-    ----------
-    reduce_columns : bool
-        Whether to remove columns with no variability from the output. Defaults
-        to ``True``.
-
-    Returns
-    -------
-    df : pandas.DataFrame
-        Dataframe with summarized results.
+    Used when plotting aggregated channel pairs figures (``plot_aggregated``).
     '''
-    from mne.externals import h5io
-    from DiamSar.utils import progressbar as pbarobj
+    from .utils import translate_study
 
-    stat_dir = op.join(pth.paths.get_path('main', 'C'), 'analysis', stat_dir)
-    stat_files = [f for f in os.listdir(stat_dir) if f.endswith('.hdf5')
-                  and 'asy_pairs' in f]
-    n_stat = len(stat_files)
+    if contrast in ['cvsd', 'dreg']:
+        studies = ['A', 'C', 'D', 'E']
+    elif contrast in ['cvsc', 'creg']:
+        studies = ['B', 'C', 'D']
+    elif contrast ==  'cdreg':
+        studies = ['A', 'C', 'D', 'E']
 
-    # first, create an empty dataframe
-    stat_params = ['study', 'contrast', 'space', 'ch_pair', 'N_low', 'N_high',
-                   'N_all', 'eyes', 'selection', 'freq_range', 'avg_freq',
-                   'transform', 'div_by_sum']
-    stats = ['t', 'p', 'es', 'ci']
-    stat_summary = [x + ' 1' for x in stats] + [x + ' 2' for x in stats]
-    df = pd.DataFrame(index=np.arange(1, n_stat + 1),
-                      columns=stat_params + stat_summary)
+    psds = {'high': list(), 'low': list()}
+    for study in studies:
+        data = io.prepare_data(paths, selection=selection, study=study,
+                               space=space, contrast=contrast, scale_psd=True,
+                               confounds=confounds)
+        # deal with confounds
+        if confounds:
+            from scipy.stats import zscore
+            residuals = _deal_with_confounds(data)
+            residuals = zscore(residuals, axis=0)
+            data['hilo'] = residuals
+            if 'reg' not in contrast:
+                grp = data['bdi'][:, -1] > 0
+                data['hi'] = residuals[grp]
+                data['lo'] = residuals[~grp]
+            data['bdi'] = data['bdi'][:, -1]
 
-    pbar = pbarobj(progressbar, n_stat * 2)
-    for idx, fname in enumerate(stat_files, start=1):
-        stat = h5io.read_hdf5(op.join(stat_dir, fname))
+        elif 'reg' in contrast:
+            # we have to standardize depression scores
+            # (different scales for BDI and PHQ-9)
+            from scipy.stats import zscore
+            data['bdi'] = zscore(data['bdi'])
 
-        for col in stat_params:
-            df.loc[idx, col] = stat[col] if col in stat else np.nan
+        if 'reg' not in contrast:
+            psds['low'].append(data['lo'])
+            psds['high'].append(data['hi'])
+        else:
+            psds['low'].append(data['bdi'])
+            psds['high'].append(data['hilo'])
 
-        # for ES and CI we need the original data:
-        params = ['study', 'space', 'contrast']
-        study, space, contrast = [stat[param] for param in params]
-        data = run_analysis(selection='asy_pairs', study=study,
-                            space=space, contrast=contrast,
-                            confounds=confounds, return_data=True)
+    low = np.concatenate(psds['low'], axis=0)
+    high = np.concatenate(psds['high'], axis=0)
 
-        # add stats
-        for ch_idx in range(2):
-            stat_col = ch_idx * 4
-            t, p = stat['stat'][ch_idx], stat['pval'][ch_idx]
-            df.loc[idx, stat_summary[stat_col]] = t
-            df.loc[idx, stat_summary[stat_col + 1]] = p
+    studies = [translate_study[std] for std in studies]
+    return high, low, studies, data
 
-            if 'vs' in contrast and not confounds:
-                psd_high, psd_low, ch_names = (data['hi'], data['lo'],
-                                               data['ch_names'])
-                esci = esci_indep_cohens_d(psd_high[:, ch_idx],
-                                           psd_low[:, ch_idx])
-            else:
-                psd_sel, bdi_sel, ch_names = (data['hilo'], data['bdi'],
-                                              data['ch_names'])
 
-                if 'vs' in contrast:
-                    onechan = psd_sel[:, [ch_idx]]
-                    beh = data['bdi']
-                    grp1 = beh[:, -1] == beh[0, -1]
-                    data1 = np.concatenate([onechan[grp1, :], beh[grp1, :]],
-                                           axis=1)
-                    data2 = np.concatenate([onechan[~grp1, :], beh[~grp1, :]],
-                                           axis=1)
-                    esci = esci_indep_cohens_d(data1, data2, n_boot=5000,
-                                               has_preds=True)
-                else:
-                    if confounds:
-                        beh = data['bdi']
-                        esci = esci_regression_r(beh, psd_sel[:, ch_idx])
-                    else:
-                        esci = esci_regression_r(bdi_sel, psd_sel[:, ch_idx])
-
-            df.loc[idx, stat_summary[stat_col + 2]] = esci['es']
-            df.loc[idx, stat_summary[stat_col + 3]] = esci['ci']
-            pbar.update(1)
-
-    pbar.close()
-
-    # split into two dfs
-    pair_rows = df['selection'].str.contains('pairs').values
-    df = df.loc[pair_rows, :].reset_index(drop=True)
-
-    df = remove_columns_with_no_variability(df)
-    df = utils.reformat_stat_table(df)
-
-    return df
+def _deal_with_confounds(data):
+    from borsar.stats import compute_regression_t
+    data, preds = data['hilo'], data['bdi']
+    tvals, residuals = compute_regression_t(data, preds[:, :-1],
+                                            return_residuals=True)
+    return residuals
 
 
 def esci_indep_cohens_d(data1, data2, n_boot=5000, has_preds=False):
@@ -561,27 +382,6 @@ def esci_regression_r(x, y, n_boot=5000):
     stats.update(bootstraps=bootstraps)
     stats.update(es=r, ci=r_ci)
     return stats
-
-
-def remove_columns_with_no_variability(df):
-    '''Remove dataframe columns with no variability.'''
-    assert isinstance(df, pd.DataFrame)
-
-    num_cols = len(df.columns)
-    to_remove = list()
-    for col_idx in range(num_cols):
-        try:
-            no_variability = (df.iloc[0, col_idx] == df.iloc[:, col_idx]).all()
-            if not no_variability:
-                # test for all being null
-                no_variability = df.iloc[:, col_idx].isnull().all()
-        except ValueError:
-            no_variability = False
-
-        to_remove.append(not no_variability)
-
-    df_sel = df.loc[:, to_remove]
-    return df_sel
 
 
 # TODO - return analyses as a dataframe?
@@ -711,30 +511,6 @@ def analyses_to_df(analyses):
     return df
 
 
-def _get_adjacency(study, space, ch_names, selection, src):
-    '''Return adjacency for given study and space.'''
-    if not space == 'src':
-        # use right-side channels in adjacency if we calculate asymmetry
-        if 'asy' in selection:
-            ch_names = [ch.split('-')[1] for ch in ch_names]
-        neighbours = pth.paths.get_data('neighbours', study=study)
-        adjacency = construct_adjacency_matrix(
-            neighbours, ch_names, as_sparse=True)
-    else:
-        import mne
-        adjacency = mne.spatial_src_connectivity(src)
-        if not selection == 'all':
-            if isinstance(ch_names, dict):
-                from .src import _to_data_vert
-                data_vert = _to_data_vert(src, ch_names)
-            else:
-                data_vert = ch_names
-            idx1, idx2 = np.ix_(data_vert, data_vert)
-            adjacency = sparse.coo_matrix(
-                adjacency.toarray()[idx1, idx2])
-    return adjacency
-
-
 def _construct_clusters(clusters, pval, stat, space, stat_info, info,
                         src, subjects_dir, subject, ch_names, freq):
     '''Construct Clusters object out of cluster-based test results.'''
@@ -768,29 +544,6 @@ def _construct_clusters(clusters, pval, stat, space, stat_info, info,
     return clst
 
 
-def _get_space_info(study, space, ch_names, selection):
-    '''Return relevant source/channel space along with additional variables.'''
-    if not space == 'src':
-        info = pth.paths.get_data('info', study=study)
-        src, subjects_dir, subject = None, None, None
-
-        # check that channel order agrees between psds and info
-        msg = 'Channel order does not agree between psds and info object.'
-        assert (np.array(ch_names) == np.array(info['ch_names'])).all(), msg
-    else:
-        # read fwd, get subjects_dir and subject
-        subjects_dir = pth.paths.get_path('subjects_dir')
-        info = None
-        if 'asy' in selection:
-            src = pth.paths.get_data('src_sym')
-            subject = 'fsaverage_sym'
-        else:
-            subject = 'fsaverage'
-            src = pth.paths.get_data('fwd', study=study)['src']
-
-    return info, src, subject, subjects_dir
-
-
 def save_stat(stat, save_dir='stats'):
     '''
     Save stat_info dictionary or Clusters object with default name and to
@@ -817,8 +570,8 @@ def save_stat(stat, save_dir='stats'):
 
 
 # TODO: add option to read source space Clusters
-def load_stat(fname=None, study='C', eyes='closed', space='avg',
-              contrast='cvsd', selection=None, freq_range=(8, 13),
+def load_stat(fname=None, study=None, eyes='closed', space='avg',
+              contrast=None, selection=None, freq_range=(8, 13),
               avg_freq=None, transform=None, div_by_sum=False,
               stat_dir=None):
     '''Read previously saved analysis result.
@@ -849,13 +602,29 @@ def load_stat(fname=None, study='C', eyes='closed', space='avg',
 
         ptrn = fname.format(*vars)
         ptrn = ptrn.replace('(', '\\(').replace(')', '\\)')
+        ptrn = ptrn.replace('[', '\\[').replace(']', '\\]')
         stat_dir = op.join(pth.paths.get_path('main', 'C'), 'analysis',
                            stat_dir)
         fls = os.listdir(stat_dir)
         ok_files = [f for f in fls if len(re.findall(ptrn, f)) > 0]
-        if len(ok_files) == 0:
+        n_files = len(ok_files)
+        if n_files == 0:
             raise FileNotFoundError('Could not find requested file.')
-        elif len(ok_files) > 1:
+        elif n_files > 1:
+            # explain which files (parts of files) cannot be disambiguated
+            file_segments = [f.replace('.hdf5', '').split('_')
+                             for f in ok_files]
+            for idx in range(len(file_segments[0])):
+                is_same = True
+                compare = file_segments[0][idx]
+                for pair in range(1, n_files):
+                    if not file_segments[pair][idx] == compare:
+                        is_same = False
+                        break
+                if is_same:
+                    for elm in range(n_files):
+                        file_segments[elm][idx] = '...'
+            ok_files = ['_'.join(f) for f in file_segments]
             raise ValueError('Multiple files match your description:\n'
                              + ',\n'.join(ok_files))
         fname = op.join(stat_dir, ok_files[0])
@@ -870,17 +639,21 @@ def _load_stat(fname):
     if 'clusters' in stat:
         from borsar.cluster import Clusters
 
-        study = stat['description']['study']
         if 'src' in fname:
             info = None
+            study = (stat['description']['study']
+                     if 'study' in stat['description'] else 'C')
             # FIXME: src should be different when 'asy'
             src = pth.paths.get_data('fwd', study=study)['src']
             selection = stat['description']['selection']
             subject = 'fsaverage_sym' if 'asy' in selection else 'fsaverage'
             subjects_dir = pth.paths.get_path('subjects_dir')
         else:
+            import sarna
             src = None
+            study = stat['description']['study']
             info = pth.paths.get_data('info', study=study)
+            sarna.utils.fix_channel_pos(info)
             subject, subjects_dir = None, None
 
         clst = Clusters(stat['stat'], stat['clusters'], stat['pvals'],
