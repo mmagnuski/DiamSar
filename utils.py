@@ -215,15 +215,27 @@ def recode_variables(beh, use_bdi=False, data=None, warn_prop_missing=0.05):
     beh.loc[:, 'age'] = zscore(beh.loc[:, 'age'])
     if 'education' in beh.columns:
         if beh.education.dtype == 'O':
-            # Wronski study, we construct dummy codes for education
-            beh.loc[:, 'lic'] = beh.education == 'licencjat'
-            beh.loc[:, 'mgr'] = ((beh.education == 'magisterskie')
-                                 | (beh.education == 'podyplomowe'))
+            if (beh.education == 'licencjat').any():
+                # Wronski study, we construct dummy codes for education
+                beh.loc[:, 'lic'] = beh.education == 'licencjat'
+                beh.loc[:, 'mgr'] = ((beh.education == 'magisterskie')
+                                     | (beh.education == 'podyplomowe'))
 
-            beh.loc[:, 'lic'] = beh.loc[:, 'lic'] - beh.loc[:, 'lic'].mean()
-            beh.loc[:, 'mgr'] = beh.loc[:, 'mgr'] - beh.loc[:, 'mgr'].mean()
+                beh.loc[:, 'lic'] = beh.loc[:, 'lic'] - beh.loc[:, 'lic'].mean()
+                beh.loc[:, 'mgr'] = beh.loc[:, 'mgr'] - beh.loc[:, 'mgr'].mean()
 
-            sel_cols = sel_cols[:2] + ['lic', 'mgr'] + sel_cols[3:]
+                sel_cols = sel_cols[:2] + ['lic', 'mgr'] + sel_cols[3:]
+            elif (beh.education == 'Wyższe (licencjat)').any():
+                # DiamSar study
+                dummy_vals = ['Wyższe (magister)', 'Wyższe (licencjat)',
+                              'Student']
+                rename_to = ['mgr', 'lic', 'stu']
+                for val, name in zip(dummy_vals, rename_to):
+                    beh.loc[:, name] = beh.education == val
+                    beh.loc[:, name] = (beh.loc[:, name] -
+                                        beh.loc[:, name].mean())
+                sel_cols = sel_cols[:2] + ['stu', 'lic', 'mgr'] + sel_cols[3:]
+
         else:
             beh.loc[:, 'education'] = zscore(beh.loc[:, 'education'])
     else:
@@ -254,6 +266,10 @@ def reformat_stat_table(tbl):
             columns.remove(col)
 
     col_ord = firstcols + columns[2:]
+    if 'space' not in tbl:
+        col_ord.remove('space')
+
+    # select columns in desired order
     tbl2 = tbl.loc[:, col_ord]
 
     # N
@@ -269,7 +285,9 @@ def reformat_stat_table(tbl):
 
     # sorting
     # -------
-    tbl2 = tbl2.sort_values(['contrast', 'study', 'space'])
+    sort_cols = ['contrast', 'study', 'space']
+    sort_cols = sort_cols if 'space' in tbl else sort_cols[:-1]
+    tbl2 = tbl2.sort_values(sort_cols)
     contrast_ord = ['cvsd', 'cvsc', 'cdreg', 'dreg', 'creg']
 
     all_idx = list()
@@ -291,8 +309,9 @@ def reformat_stat_table(tbl):
 
         # nan -> NA
         if has_clusters:
-            for col in ['min cluster p', 'largest cluster size']:
-                if np.isnan(tbl2.loc[idx, col]):
+            for col in ['min cluster p', 'largest cluster size', 'eff dir']:
+                val = tbl2.loc[idx, col]
+                if not isinstance(val, str) and np.isnan(val):
                     tbl2.loc[idx, col] = 'NA'
 
             # round t and p vals

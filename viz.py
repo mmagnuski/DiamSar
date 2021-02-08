@@ -9,9 +9,9 @@ from borsar.viz import Topo
 
 from sarna.viz import prepare_equal_axes
 
-from . import freq, analysis, utils
-from .analysis import load_stat
-from .utils import colors
+from . import freq, analysis, utils, io
+from .analysis import load_stat, run_analysis
+from .utils import colors, translate_contrast, translate_study
 
 
 # - [ ] change to use Info
@@ -33,7 +33,7 @@ def plot_unavailable(stat, axis=None):
     return topo
 
 
-def plot_grid_cluster(stats_clst, contrast, vlim=3):
+def plot_grid_cluster(stats_clst, contrast, vlim=3, show_unavailable=False):
     '''
     Plot cluster-corrected contrast results in a reference by study grid.
 
@@ -52,61 +52,90 @@ def plot_grid_cluster(stats_clst, contrast, vlim=3):
     fig : matplotlib.Figure
         Matplotlib figure with visualized results.
     '''
-    fig = plt.figure(figsize=(9, 7.5))
-    ax = prepare_equal_axes(fig, [2, 3], space=[0.12, 0.85, 0.02, 0.65])
+    contrast_to_ncols = {'cvsd': 4, 'cvsc': 3, 'cdreg': 4, 'dreg': 4}
+    n_cols = contrast_to_ncols[contrast] if not show_unavailable else 5
+    cntrst = utils.translate_contrast[contrast]
 
-    example_stat = load_stat(study='C', contrast='cvsd', space='avg')
+    fig = plt.figure(figsize=(n_cols * 3, 7.5))
+    ax = prepare_equal_axes(fig, [2, n_cols], space=[0.12, 0.89, 0.02, 0.65])
+
+    example_stat = load_stat(study='C', contrast='cvsd', space='avg',
+                             selection='asy_frontal')
     vmin, vmax = -vlim, vlim
-    axis_limit = 2.25
-
+    axis_limit = 0.13
+    study_nums = list()
     for row_idx, space in enumerate(['avg', 'csd']):
-        query_str = 'contrast=="{}" & space == "{}"'.format(contrast, space)
+        query_str = 'contrast=="{}" & space == "{}"'.format(cntrst, space)
         this_stat = stats_clst.query(query_str)
 
-        for col_idx, study in enumerate(list('ABC')):
-            this_ax = ax[row_idx, col_idx]
-            if study in this_stat.study.values:
+        col_idx = 0
+        for study in list('ABCDE'):
+            study_num = utils.translate_study[study]
+
+            if study_num in this_stat.study.values:
+                this_ax = ax[row_idx, col_idx]
+
                 # read analysis result from disc
-                stat = load_stat(study=study, contrast=contrast, space=space)
+                stat = load_stat(study=study, contrast=contrast, space=space,
+                                 selection='asy_frontal')
 
                 # plot results
-                topo = stat.plot(cluster_idx=0, outlines='skirt',
-                                 extrapolate='head', axes=this_ax, vmin=vmin,
-                                 vmax=vmax)
+                # earlier: outlines='skirt', extrapolate='head'
+                topo = stat.plot(cluster_idx=0, extrapolate='local',
+                                 axes=this_ax, vmin=vmin, vmax=vmax)
 
-                # modify channel and cluster mark sizes and add text
-                topo.chan.set_sizes([2.5])
+                # correct channel marks
+                topo.chan.remove()
+                this_ax.scatter(*topo.chan_pos.T, s=5, c='k', linewidths=0,
+                                zorder=1)
+
                 if len(topo.marks) > 0:
-                    topo.marks[0].set_markersize(6.)
+                    topo.marks[0].set_markersize(8.)
                     this_ax.set_title(format_pvalue(stat.pvals[0]),
-                                      fontsize=14, pad=0)
+                                      fontsize=16, pad=0)
                 else:
-                    this_ax.set_title('no clusters', fontsize=14, pad=0)
-            else:
-                plot_unavailable(example_stat, axis=this_ax)
+                    this_ax.set_title('no clusters', fontsize=16, pad=0)
+
+                col_idx += 1
+                if space == 'avg':
+                    study_nums.append(study_num)
+            elif show_unavailable:
+                plot_unavaiable(example_stat, axis=this_ax)
+                col_idx += 1
 
             # set figure limits
-            this_ax.set_ylim((-axis_limit, axis_limit))
-            this_ax.set_xlim((-axis_limit, axis_limit))
+            if study_num in this_stat.study.values or show_unavailable:
+                # this_ax.set_ylim((-axis_limit, axis_limit))
+                # this_ax.set_xlim((-axis_limit, axis_limit))
+                zoom_topo(topo, (-0.03, 0.13), (-0.03, 0.13))
 
     # add colorbar
-    cbar_ax = fig.add_axes([0.87, 0.08, 0.03, 0.55])
+    cbar_ax = fig.add_axes([0.92, 0.08, 0.03, 0.55])
     cbar = plt.colorbar(mappable=topo.img, cax=cbar_ax)
-    cbar.set_label('t values', fontsize=12)
+    cbar.set_label('t values', fontsize=14)
+    for tck in cbar_ax.yaxis.get_majorticklabels():
+        tck.set_fontsize(12)
 
     # add study labels
     # ----------------
-    for idx, letter in enumerate(['I', 'II', 'III']):
+    x_mids = list()
+    for idx, study in enumerate(study_nums):
         this_ax = ax[0, idx]
         box = this_ax.get_position()
         mid_x = box.corners()[:, 0].mean()
+        x_mids.append(mid_x)
 
-        plt.text(mid_x, 0.72, letter, va='center', ha='center',
+        plt.text(mid_x, 0.72, study, va='center', ha='center',
                  transform=fig.transFigure, fontsize=21)
 
-        if idx == 1:
-            plt.text(mid_x, 0.8, 'STUDY', va='center', ha='center',
-                     transform=fig.transFigure, fontsize=21)
+    iseven = (n_cols % 2) == 0
+    hlf = int(np.floor(n_cols / 2))
+    if iseven:
+        mid_x = np.mean(x_mids[hlf - 1:hlf + 1])
+    else:
+        mid_x = x_mids[hlf]
+    plt.text(mid_x, 0.8, 'STUDY', va='center', ha='center',
+             transform=fig.transFigure, fontsize=21)
 
     # add reference labels
     # --------------------
@@ -124,7 +153,6 @@ def plot_grid_cluster(stats_clst, contrast, vlim=3):
     plt.text(0.03, mid_y, 'REFERENCE', va='center', ha='center',
              transform=fig.transFigure, fontsize=21, rotation=90)
 
-    cntrst = utils.translate_contrast[contrast]
     fig.suptitle('{} contrast'.format(cntrst), fontsize=22, fontweight='bold')
     fig.text(0.5, 0.895, 'cluster-based permutation test results', fontsize=21,
              va='center', ha='center')
@@ -184,18 +212,21 @@ def plot_multi_topo(psds_avg, info_frontal, info_asy):
 
 # - [ ] consider adding CI per swarm
 # - [ ] consider adding effsize and bootstrapped CIs
-def plot_swarm(df, ax=None, ygrid=True):
+def plot_swarm(df, ax=None, ygrid=True, label_size=20, point_size=10,
+               spine_offset=25, ticklabel_size=14, axline_width=2,
+               tick_length=8, grid_width=2):
     '''
     Swarmplot for single channel pairs asymmetry. Used for group contrast
     visualization.
     '''
+
     if ax is None:
         gridspec = dict(bottom=0.2, top=0.92, left=0.2, right=0.99)
         fig, ax = plt.subplots(figsize=(8, 6), gridspec_kw=gridspec)
 
     # swarmplot
     # ---------
-    ax = sns.swarmplot("group", "asym", data=df, size=10,
+    ax = sns.swarmplot("group", "asym", data=df, size=point_size,
                        palette=[colors['diag'], colors['hc']], ax=ax, zorder=5)
 
     # add means and CIs
@@ -220,11 +251,17 @@ def plot_swarm(df, ax=None, ygrid=True):
 
     # axis and tick labels
     # --------------------
-    ax.set_ylabel('alpha asymmetry', fontsize=20)
+    ax.set_ylabel('alpha asymmetry', fontsize=label_size)
     ax.set_xticklabels(['diagnosed', 'healthy\ncontrols'],
-                       fontsize=20)
+                       fontsize=label_size)
     ax.set_xlabel('')
-    axis_frame_aes(ax, ygrid=ygrid)
+    axis_frame_aes(ax, ygrid=ygrid, spine_offset=spine_offset,
+                   ticklabel_size=ticklabel_size, axline_width=axline_width,
+                   tick_length=tick_length, grid_width=grid_width)
+
+    # set x tick labels again - their fontsize seems to be ignored
+    ax.set_xticklabels(['diagnosed', 'healthy\ncontrols'],
+                       fontsize=label_size)
 
     # t test value
     # ------------
@@ -232,23 +269,23 @@ def plot_swarm(df, ax=None, ygrid=True):
     return ax
 
 
-def axis_frame_aes(ax, ygrid=True):
+def axis_frame_aes(ax, ygrid=True, spine_offset=25, ticklabel_size=14,
+                   axline_width=2, tick_length=8, grid_width=2):
     '''Nice axis spines.'''
-    sns.despine(ax=ax, trim=False, offset=25)
+    sns.despine(ax=ax, trim=False, offset=spine_offset)
     _trim_y(ax)
 
     for tck in ax.yaxis.get_majorticklabels():
-        tck.set_fontsize(14)
+        tck.set_fontsize(ticklabel_size)
 
     # change width of spine lines
-    axline_width = 2
     ax.spines['bottom'].set_linewidth(axline_width)
     ax.spines['left'].set_linewidth(axline_width)
-    ax.xaxis.set_tick_params(width=axline_width, length=8)
-    ax.yaxis.set_tick_params(width=axline_width, length=8)
+    ax.xaxis.set_tick_params(width=axline_width, length=tick_length)
+    ax.yaxis.set_tick_params(width=axline_width, length=tick_length)
 
     if ygrid:
-        ax.yaxis.grid(color=[0.88, 0.88, 0.88], linewidth=2,
+        ax.yaxis.grid(color=[0.88, 0.88, 0.88], linewidth=grid_width,
                       zorder=0, linestyle='--')
 
 
@@ -297,9 +334,16 @@ def plot_swarm_grid(study, space, contrast):
 def create_swarm_df(psd_high, psd_low):
     df_list = list()
     groups = ['diag'] * psd_high.shape[0] + ['hc'] * psd_low.shape[0]
-    for ar in [0, 1]:
+    if psd_high.ndim == 1:
+        psd_high = psd_high[:, np.newaxis]
+    if psd_low.ndim == 1:
+        psd_low = psd_low[:, np.newaxis]
+
+    for ar in range(psd_high.shape[1]):
         data = np.concatenate([psd_high[:, ar], psd_low[:, ar]])
         df_list.append(pd.DataFrame(data={'asym': data, 'group': groups}))
+    if len(df_list) == 1:
+        df_list = df_list[0]
     return df_list
 
 
@@ -364,23 +408,42 @@ def plot_heatmap_add1(clst, ax_dict=None, scale=None):
     freqlabel1, freqlabel2 = '9 - 10 Hz', '11.5 - 12.5 Hz'
     idx1, idx2 = None, None
 
-    show_p = ((contrast == 'dreg' and clst.description['study'] == 'C')
-              or (contrast == 'cvsd' and clst.description['study'] == 'C')
-              or (contrast == 'cdreg' and clst.description['study'] == 'C'))
-    if show_p:
-        freqlabel1 += '\np = {:.3f}'.format(clst.pvals[1])
-        freqlabel2 += '\np = {:.3f}'.format(clst.pvals[0])
-        idx1, idx2 = 1, 0
-
-    # topo 1
+    freq_clst = clst.clusters.sum(axis=(0, 1)) if len(clst) > 0 else None
     mark_kwargs = {'markersize': scale['markersize']}
     topo_args = dict(vmin=-4, vmax=4, mark_clst_prop=0.3,
-                     mark_kwargs=mark_kwargs, border='mean')
-    tp1 = clst.plot(cluster_idx=idx1, freq=freqs1, axes=f_ax2, **topo_args)
+                     mark_kwargs=mark_kwargs, border='mean',
+                     extrapolate='local')
+
+    # TODO - refactor, separte into a function
+    # lower freq
+    if len(clst) > 0 and freq_clst[:5].sum() > 0:
+        which_clst = clst.clusters[:, :, :5].sum(axis=(1, 2)).argmax()
+        # find optimal freqs
+        _, freqr = clst.get_cluster_limits(which_clst)
+        frql, frqh = clst.dimcoords[1][freqr][[0, -1]]
+        freqs1 = (frql, frqh)
+        freqlabel1 = ('{} - {} Hz'.format(frql, frqh) if not frql == frqh
+                      else '{} Hz'.format(frql))
+
+        freqlabel1 += '\np = {:.3f}'.format(clst.pvals[which_clst])
+        tp1 = clst.plot(cluster_idx=which_clst, freq=freqs1, axes=f_ax2, **topo_args)
+    else:
+        tp1 = clst.plot(freq=freqs1, axes=f_ax2, **topo_args)
     tp1.axes.set_title(freqlabel1, fontsize=scale['topo_title'])
 
-    # topo 2
-    tp2 = clst.plot(cluster_idx=idx2, freq=freqs2, axes=f_ax3, **topo_args)
+    if len(clst) > 0 and freq_clst[6:].sum() > 0:
+        which_clst = clst.clusters[:, :, 6:].sum(axis=(1, 2)).argmax()
+        # find optimal freqs
+        _, freqr = clst.get_cluster_limits(which_clst)
+        frql, frqh = clst.dimcoords[1][freqr][[0, -1]]
+        freqs2 = (frql, frqh)
+        freqlabel2 = ('{} - {} Hz'.format(frql, frqh) if not frql == frqh
+                      else '{} Hz'.format(frql))
+
+        freqlabel2 += '\np = {:.3f}'.format(clst.pvals[which_clst])
+        tp2 = clst.plot(cluster_idx=which_clst, freq=freqs2, axes=f_ax3, **topo_args)
+    else:
+        tp2 = clst.plot(freq=freqs2, axes=f_ax3, **topo_args)
     tp2.axes.set_title(freqlabel2, fontsize=scale['topo_title'])
 
     obj_dict = {'heatmap': f_ax1, 'colorbar': cbar_ax, 'topo1': tp1,
@@ -418,11 +481,13 @@ def bdi_histogram(bdi, omit_unclassified=False, bin_step=5):
 
     plt.sca(ax[0])
 
+    labelsize = 26
+    ticksize = 19
     plt.hist(data, bins, stacked=True, color=colors_list)
-    plt.yticks([0, 5, 10, 15, 20, 25], fontsize=16)
-    plt.ylabel('Number of participants', fontsize=23)
-    plt.xticks(xtcks, fontsize=16)
-    plt.xlabel(bdi_col, fontsize=23)
+    plt.yticks([0, 5, 10, 15, 20, 25], fontsize=ticksize)
+    plt.ylabel('Number of\nparticipants', fontsize=labelsize)
+    plt.xticks(xtcks, fontsize=ticksize)
+    plt.xlabel(bdi_col, fontsize=labelsize)
     ax[0].set_xlim((0, xtcks[-1]))
     ax[0].set_ylim((0, 28))
     return fig, ax[0]
@@ -473,6 +538,7 @@ def plot_panel(bdi, bar_h=0.6, seed=22):
     plot_swarm(df, ax=axs[0, 0])
 
     # regression
+    axs[0, 1].set_xlim([-3, 53])
     sns.regplot(x=bdi['BDI-II'].values, y=bdi['y'].values, color=colors['mid'],
                 ax=axs[0, 1], scatter=True, scatter_kws={'s': 0})
 
@@ -486,21 +552,21 @@ def plot_panel(bdi, bar_h=0.6, seed=22):
 
     # prepare contrast legend vars
     # ----------------------------
-    cntr1, cntr2, cntr3 = -1, -2, 0
-    bar1y, bar2y, bar3y = [c - bar_h / 2 for c in [cntr1, cntr2, cntr3]]
+    cntr1, cntr2 = -2, -1
+    bar1y, bar2y = [c - bar_h / 2 for c in [cntr1, cntr2]]
     length_to_end = 50 - second_min_diag_bdi
 
     # group contrast legends
     # ----------------------
     rectanges = _create_group_rectangles(
-        bar1y, bar2y, bar_h, second_min_diag_bdi, length_to_end)
+        bar2y, bar1y, bar_h, second_min_diag_bdi, length_to_end)
     for rct in rectanges:
         axs[1, 0].add_artist(rct)
 
     # regression contrast legends
     # ---------------------------
     rectanges = _create_regression_rectanges(
-        bar1y, bar2y, bar3y, bar_h, length_to_end, second_min_diag_bdi)
+        bar1y, bar2y, bar_h, length_to_end, second_min_diag_bdi)
     for rct in rectanges:
         axs[1, 1].add_artist(rct)
 
@@ -508,7 +574,10 @@ def plot_panel(bdi, bar_h=0.6, seed=22):
     # ----------
     axs[0, 1].set_ylabel("")
     axs[0, 1].set_xticklabels([])
-    axs[0, 1].set_xlabel('BDI', fontsize=17)
+    axs[0, 1].set_xlabel('deression score', fontsize=18)
+
+    # adjust regression panel x limits
+    axs[0, 1].set_xlim([-5, 55])
 
     for ax in axs[0, :]:
         # equal tick spacing through data range
@@ -523,35 +592,36 @@ def plot_panel(bdi, bar_h=0.6, seed=22):
     for ax in axs[1, :]:
         # limits, labels and ticks
         ax.set_xlim((0, 50))
-        ax.set_xlabel('BDI', fontsize=17)
+        ax.set_xlabel('depression score', fontsize=18)
         ax.set_ylabel('')
         ax.set_xticks([0, 10, 20, 30, 40, 50])
 
         # tick labels fontsize
-        for axside in [ax.xaxis, ax.yaxis]:
-            for tck in axside.get_majorticklabels():
-                tck.set_fontsize(17)
+        for tck in ax.xaxis.get_majorticklabels():
+            tck.set_fontsize(17)
+        for tck in ax.yaxis.get_majorticklabels():
+            tck.set_fontsize(18)
 
         # add grid
         ax.xaxis.grid(color=[0.88, 0.88, 0.88], linewidth=2,
                       zorder=0, linestyle='--')
 
-    axs[0, 0].set_xticklabels(['diagnosed', 'healthy\ncontrols'], fontsize=17)
+    axs[0, 0].set_xticklabels(['diagnosed', 'healthy\ncontrols'], fontsize=18)
 
     axs[1, 0].set_ylim((-2.5, -0.5))
     axs[1, 0].set_yticks([cntr2, cntr1])
-    axs[1, 0].set_yticklabels(['SvsHC', 'DvsHC'])
+    axs[1, 0].set_yticklabels(['DvsHC', 'SvsHC'], fontsize=19)
 
-    axs[1, 1].set_ylim((-2.75, 0.75))
-    axs[1, 1].set_yticks([cntr2, cntr1, cntr3])
-    axs[1, 1].set_yticklabels(['allReg', 'nonDReg', 'DReg'])
+    axs[1, 1].set_ylim((-2.5, -0.5))
+    axs[1, 1].set_yticks([cntr2, cntr1])
+    axs[1, 1].set_yticklabels(['allReg', 'DReg'], fontsize=19)
 
     return fig
 
 
 def src_plot(clst, cluster_idx=None, colorbar='mayavi', azimuth=[35, 125],
              elevation=[None, None], cluster_p=True, vmin=-3, vmax=3,
-             figure_size=None):
+             figure_size=None, backface_culling=False):
     '''Plot source-level clusters as two-axis image.
 
     Parameters
@@ -603,6 +673,11 @@ def src_plot(clst, cluster_idx=None, colorbar='mayavi', azimuth=[35, 125],
         # fing and hide cluster p text
         clst_txt = brain.texts_dict['time_label']['text']
         clst_txt.remove()
+
+    if backface_culling:
+        brain.data['surfaces'][0].actor.property.backface_culling = True
+        for ldict in brain._label_dicts.values():
+            ldict['surfaces'][0].actor.property.backface_culling = True
 
     imgs = list()
     for azi, ele in zip(azimuth, elevation):
@@ -658,21 +733,22 @@ def src_plot(clst, cluster_idx=None, colorbar='mayavi', azimuth=[35, 125],
     return fig
 
 
-def _create_regression_rectanges(bar1y, bar2y, bar3y, bar_h, length_to_end,
+def _create_regression_rectanges(bar1y, bar2y, bar_h, length_to_end,
                                  second_min_diag_bdi):
-    rct1 = plt.Rectangle((0, bar1y), 5, bar_h, color=colors['hc'], zorder=5)
-    rct2 = plt.Rectangle((5, bar1y), 5, bar_h, color=colors['mid'], zorder=6)
-    rct4 = plt.Rectangle((10, bar1y), 40, bar_h, color=colors['subdiag'],
+    # rct1 = plt.Rectangle((0, bar1y), 5, bar_h, color=colors['hc'], zorder=5)
+    # rct2 = plt.Rectangle((5, bar1y), 5, bar_h, color=colors['mid'], zorder=6)
+    # rct4 = plt.Rectangle((10, bar1y), 40, bar_h, color=colors['subdiag'],
+    #                      zorder=5)
+    rct3 = plt.Rectangle((0, bar1y), 5, bar_h, color=colors['hc'], zorder=5)
+    rct5 = plt.Rectangle((10, bar1y), 40, bar_h, color=colors['subdiag'],
                          zorder=5)
-    rct3 = plt.Rectangle((0, bar2y), 5, bar_h, color=colors['hc'], zorder=5)
-    rct5 = plt.Rectangle((10, bar2y), 40, bar_h, color=colors['subdiag'],
-                         zorder=5)
-    rct6 = plt.Rectangle((5, bar2y), 5, bar_h, color=colors['mid'], zorder=5)
-    rct7 = plt.Rectangle((second_min_diag_bdi, bar2y), length_to_end,
+    rct6 = plt.Rectangle((5, bar1y), 5, bar_h, color=colors['mid'], zorder=5)
+    rct7 = plt.Rectangle((second_min_diag_bdi, bar1y), length_to_end,
                          bar_h / 2, color=colors['diag'], zorder=5)
-    rct8 = plt.Rectangle((second_min_diag_bdi, bar3y), length_to_end, bar_h,
+    rct8 = plt.Rectangle((second_min_diag_bdi, bar2y), length_to_end, bar_h,
                          color=colors['diag'], zorder=5)
-    return [rct1, rct2, rct3, rct4, rct5, rct6, rct7, rct8]
+    # return [rct1, rct2, rct3, rct4, rct5, rct6, rct7, rct8]
+    return [rct3, rct5, rct6, rct7, rct8]
 
 
 def _create_group_rectangles(bar1y, bar2y, bar_h, second_min_diag_bdi,
@@ -686,87 +762,7 @@ def _create_group_rectangles(bar1y, bar2y, bar_h, second_min_diag_bdi,
     return [rct1, rct2, rct3, rct4]
 
 
-def _pairs_aggregated_studies(space, contrast):
-    '''
-    Read all studies that include given contrast and aggregate their data.
-
-    Used when plotting aggregated channel pairs figures (``plot_aggregated``).
-    '''
-    if contrast in ['cvsd', 'dreg']:
-        studies = ['A', 'C']
-    elif contrast in ['cvsc', 'creg']:
-        studies = ['B', 'C']
-    elif contrast ==  'cdreg':
-        studies = ['C']
-
-    psds = {'high': list(), 'low': list()}
-    for study in studies:
-        psd_high, psd_low, ch_names = freq.get_psds(
-                            selection='asy_pairs', study=study,
-                            space=space, contrast=contrast)
-        psds['low'].append(psd_low)
-        psds['high'].append(psd_high)
-
-    low = np.concatenate(psds['low'], axis=0)
-    high = np.concatenate(psds['high'], axis=0)
-
-    studies = [utils.utils.translate_study[std] for std in studies]
-    return high, low, studies, ch_names
-
-
-def _compute_stats_group(high, low, ch_idx=0):
-    '''Used when plotting aggregated channel pairs figures
-    (``plot_aggregated``).'''
-    from scipy.stats import ttest_ind
-    stats = analysis.esci_indep_cohens_d(
-        high[:, ch_idx], low[:, ch_idx])
-
-    nx, ny = high.shape[0], low.shape[0]
-    t, p = ttest_ind(high[:, ch_idx], low[:, ch_idx])
-    out = pg.bayesfactor_ttest(t, nx, ny, paired=False)
-    bf01 = 1 / float(out)
-    stats.update({'bf01': bf01})
-
-    return stats
-
-
-def _compute_stats_regression(data1, data2, ch_idx=0):
-    '''Used when plotting aggregated channel pairs figures
-    (``plot_aggregated``).'''
-    stats = analysis.esci_regression_r(data1[:, ch_idx], data2)
-
-    nx = data1.shape[0]
-    out = pg.bayesfactor_pearson(stats['es'], nx)
-    bf01 = 1 / float(out)
-    stats.update({'bf01': bf01})
-
-    return stats
-
-
-def _plot_dist_esci(ax, ypos, stats, color=None):
-    '''Plots a single bootstraps distribution along with effect size and
-    bootstrap confidence interval for the effect size.
-
-    Used when plotting aggregated channel pairs figures (``plot_aggregated``).
-    '''
-    from dabest.plot_tools import halfviolin
-
-    color = color if color is not None else ds.utils.colors['hc']
-
-    v = ax.violinplot(stats['bootstraps'], positions=[ypos],
-                      showextrema=False, showmedians=False,
-                      widths=0.5, vert=False)
-    halfviolin(v, fill_color=color, alpha=0.85, half='top')
-
-    line_color = np.array([0] * 3) / 255
-    ax.plot(stats['es'], [ypos], marker='o', color=line_color,
-                       markersize=12, zorder=6)
-    ax.plot(stats['ci'], [ypos, ypos], linestyle="-", color=line_color,
-            linewidth=3.5, zorder=5)
-    return v
-
-
-def plot_aggregated(ax=None, eff='d'):
+def plot_aggregated(paths, ax=None, eff='d', confounds=False):
     '''Plot aggregated effect sizes, confidence intervals and bayes factors for
     channel pairs analyses.
 
@@ -782,6 +778,7 @@ def plot_aggregated(ax=None, eff='d'):
     ax: matplotlib axis
         Axis used to plot to.
     '''
+    from .analysis import _aggregate_studies
 
     if ax is None:
         # create axis to plot to
@@ -798,15 +795,15 @@ def plot_aggregated(ax=None, eff='d'):
     addpos = 0.09 if eff == 'd' else 0.065
     stat_fun = (_compute_stats_group if eff == 'd'
                 else _compute_stats_regression)
-    distr_color = (ds.utils.colors['hc'] if eff == 'd'
-                   else ds.utils.colors['subdiag'])
-    contrasts = ['cvsd', 'cvsc'] if eff == 'd' else ['dreg', 'creg', 'cdreg']
+    distr_color = (colors['hc'] if eff == 'd' else colors['subdiag'])
+    contrasts = ['cvsd', 'cvsc'] if eff == 'd' else ['dreg', 'cdreg']
+    ch_names = ['F3-F4', 'F7-F8']
 
     for contrast in contrasts:
         for space in ['avg', 'csd']:
             # get relevant data
-            data1, data2, studies, ch_names = _pairs_aggregated_studies(
-                space, contrast)
+            data1, data2, studies, _ = _aggregate_studies(
+                paths, space, contrast, confounds=confounds)
 
             # channel pair loop
             for ch_idx in range(2):
@@ -818,13 +815,12 @@ def plot_aggregated(ax=None, eff='d'):
                 v['bodies'][0].set_zorder(4)
 
                 # slight y tick labeling differences
-                if len(studies) == 2:
-                    label_schematic = ('{}, {}\n{}\nstudies {} & {}'
-                                       if eff == 'd'
-                                       else '{}, {}\n{}, studies {} & {}')
+                if len(studies) > 1:
+                    label_schematic = '{}, {}, {}\nstudies {}'
+                    studies_str = ', '.join(studies[:-1]) + ' & ' + studies[-1]
                     label = label_schematic.format(
                         utils.translate_contrast[contrast], space.upper(),
-                        ch_names[ch_idx], studies[0], studies[1])
+                        ch_names[ch_idx], studies_str)
                 else:
                     label = '{}, {}\n{}, study {}'.format(
                         utils.translate_contrast[contrast], space.upper(),
@@ -862,6 +858,61 @@ def plot_aggregated(ax=None, eff='d'):
     ax.set_title('Aggregated channel pair results\nfor {}'.format(cntr),
                  fontsize=24, pad=25)
     return ax
+
+
+def _compute_stats_group(high, low, ch_idx=0):
+    '''Used when plotting aggregated channel pairs figures
+    (``plot_aggregated``).'''
+    import pingouin as pg
+    from scipy.stats import ttest_ind
+
+    stats = analysis.esci_indep_cohens_d(
+        high[:, ch_idx], low[:, ch_idx])
+
+    nx, ny = high.shape[0], low.shape[0]
+    t, p = ttest_ind(high[:, ch_idx], low[:, ch_idx])
+    out = pg.bayesfactor_ttest(t, nx, ny, paired=False)
+    bf01 = 1 / float(out)
+    stats.update({'bf01': bf01})
+
+    return stats
+
+
+def _compute_stats_regression(data1, data2, ch_idx=0):
+    '''Used when plotting aggregated channel pairs figures
+    (``plot_aggregated``).'''
+    import pingouin as pg
+    stats = analysis.esci_regression_r(data1[:, ch_idx], data2)
+
+    nx = data1.shape[0]
+    out = pg.bayesfactor_pearson(stats['es'], nx)
+    bf01 = 1 / float(out)
+    stats.update({'bf01': bf01})
+
+    return stats
+
+
+def _plot_dist_esci(ax, ypos, stats, color=None):
+    '''Plots a single bootstraps distribution along with effect size and
+    bootstrap confidence interval for the effect size.
+
+    Used when plotting aggregated channel pairs figures (``plot_aggregated``).
+    '''
+    from dabest.plot_tools import halfviolin
+
+    color = color if color is not None else ds.utils.colors['hc']
+
+    v = ax.violinplot(stats['bootstraps'], positions=[ypos],
+                      showextrema=False, showmedians=False,
+                      widths=0.5, vert=False)
+    halfviolin(v, fill_color=color, alpha=0.85, half='top')
+
+    line_color = np.array([0] * 3) / 255
+    ax.plot(stats['es'], [ypos], marker='o', color=line_color,
+                       markersize=12, zorder=6)
+    ax.plot(stats['ci'], [ypos, ypos], linestyle="-", color=line_color,
+            linewidth=3.5, zorder=5)
+    return v
 
 
 def full_fig5_supplement_plot(contrast, studies):
@@ -955,3 +1006,15 @@ def full_fig5_supplement_plot(contrast, studies):
     fig.suptitle('{} contrast'.format(contrast_name), fontsize=24,
                  fontweight='bold')
     return fig
+
+
+# TODO: move to borsar!
+def zoom_topo(topo, xlim, ylim):
+    # currntly works only for one topo (len(topo) == 1)
+    assert len(topo) == 1
+    ax = topo.axes
+    ax.set_xlim(xlim)
+    ax.set_ylim(ylim)
+
+    [line.set_clip_on(True) for line in topo.head]
+    [line.set_linewidth(1.5) for line in topo.head]
