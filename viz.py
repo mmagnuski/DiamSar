@@ -210,6 +210,7 @@ def plot_multi_topo(psds_avg, info_frontal, info_asy):
     return fig, axs
 
 
+# - [ ] make a little more universal and move to sarna
 # - [ ] consider adding CI per swarm
 # - [ ] consider adding effsize and bootstrapped CIs
 def plot_swarm(df, ax=None, ygrid=True, label_size=20, point_size=10,
@@ -330,6 +331,7 @@ def plot_swarm_grid(study, space, contrast):
     return fig
 
 
+# - [ ] make a bit more universal and move to sarna as `fast_df`
 # - [ ] compare and merge with the function in utils
 def create_swarm_df(psd_high, psd_low):
     df_list = list()
@@ -640,6 +642,9 @@ def src_plot(clst, cluster_idx=None, colorbar='mayavi', azimuth=[35, 125],
         Minimum value of the colormap.
     vmax : value
         Maximum value of the colormap.
+    backface_culling : bool
+        Backface culling seems to help with recent transparency problem with
+        mayavi (see )
 
     Returns
     -------
@@ -762,10 +767,14 @@ def _create_group_rectangles(bar1y, bar2y, bar_h, second_min_diag_bdi,
     return [rct1, rct2, rct3, rct4]
 
 
-def plot_aggregated(paths, ax=None, eff='d', confounds=False):
+def plot_aggregated(agg_df, distributions, ax=None, eff='d', confounds=False):
     '''Plot aggregated effect sizes, confidence intervals and bayes factors for
     channel pairs analyses.
 
+    Parameters
+    ----------
+    agg_df: TODO
+    distributions: TODO
     ax : matplotlib axis
         Axis to plot to.
     eff : str
@@ -778,8 +787,6 @@ def plot_aggregated(paths, ax=None, eff='d', confounds=False):
     ax: matplotlib axis
         Axis used to plot to.
     '''
-    from .analysis import _aggregate_studies
-
     if ax is None:
         # create axis to plot to
         fig_size = (11, 13.5) if eff == 'r' else (11, 12)
@@ -793,22 +800,16 @@ def plot_aggregated(paths, ax=None, eff='d', confounds=False):
 
     # 'd' vs 'r' effect size (group contrasts vs linear relationships)
     addpos = 0.09 if eff == 'd' else 0.065
-    stat_fun = (_compute_stats_group if eff == 'd'
-                else _compute_stats_regression)
-    distr_color = (colors['hc'] if eff == 'd' else colors['subdiag'])
-    contrasts = ['cvsd', 'cvsc'] if eff == 'd' else ['dreg', 'cdreg']
     ch_names = ['F3-F4', 'F7-F8']
+    contrasts = ['cvsd', 'cvsc'] if eff == 'd' else ['dreg', 'cdreg']
+    distr_color = (colors['hc'] if eff == 'd' else colors['subdiag'])
 
     for contrast in contrasts:
         for space in ['avg', 'csd']:
-            # get relevant data
-            data1, data2, studies, _ = _aggregate_studies(
-                paths, space, contrast, confounds=confounds)
-
             # channel pair loop
             for ch_idx in range(2):
-                # compute es, bootstrap esci and bf01
-                stats = stat_fun(data1, data2, ch_idx=ch_idx)
+                # get relevant data
+                # TODO - from the table
 
                 # plot distribution, ES and CI
                 v = _plot_dist_esci(ax, ypos, stats, color=distr_color)
@@ -858,38 +859,6 @@ def plot_aggregated(paths, ax=None, eff='d', confounds=False):
     ax.set_title('Aggregated channel pair results\nfor {}'.format(cntr),
                  fontsize=24, pad=25)
     return ax
-
-
-def _compute_stats_group(high, low, ch_idx=0):
-    '''Used when plotting aggregated channel pairs figures
-    (``plot_aggregated``).'''
-    import pingouin as pg
-    from scipy.stats import ttest_ind
-
-    stats = analysis.esci_indep_cohens_d(
-        high[:, ch_idx], low[:, ch_idx])
-
-    nx, ny = high.shape[0], low.shape[0]
-    t, p = ttest_ind(high[:, ch_idx], low[:, ch_idx])
-    out = pg.bayesfactor_ttest(t, nx, ny, paired=False)
-    bf01 = 1 / float(out)
-    stats.update({'bf01': bf01})
-
-    return stats
-
-
-def _compute_stats_regression(data1, data2, ch_idx=0):
-    '''Used when plotting aggregated channel pairs figures
-    (``plot_aggregated``).'''
-    import pingouin as pg
-    stats = analysis.esci_regression_r(data1[:, ch_idx], data2)
-
-    nx = data1.shape[0]
-    out = pg.bayesfactor_pearson(stats['es'], nx)
-    bf01 = 1 / float(out)
-    stats.update({'bf01': bf01})
-
-    return stats
 
 
 def _plot_dist_esci(ax, ypos, stats, color=None):
@@ -1009,12 +978,25 @@ def full_fig5_supplement_plot(contrast, studies):
 
 
 # TODO: move to borsar!
-def zoom_topo(topo, xlim, ylim):
-    # currntly works only for one topo (len(topo) == 1)
-    assert len(topo) == 1
-    ax = topo.axes
-    ax.set_xlim(xlim)
-    ax.set_ylim(ylim)
+def zoom_topo(topo, xlim, ylim, linewidth=1.5):
+    '''Zoom topography to a certain range of x and y values.
+    Useful when presenting frontal asymmetry results.
 
-    [line.set_clip_on(True) for line in topo.head]
-    [line.set_linewidth(1.5) for line in topo.head]
+    topo : borsar.viz.Topo
+        Topomap object.
+    xlim : (low, high)
+        Limits used to crop the x axis.
+    ylim : (low, high)
+        Limits used to crop the y axis.
+    linewidth : float
+        Optional: change the head outline linewidth to counteract the zooming.
+        Defaults to ``1.5``.
+    '''
+    # currntly works only for one topo (len(topo) == 1)
+    for tp in topo:
+        ax = tp.axes
+        ax.set_xlim(xlim)
+        ax.set_ylim(ylim)
+
+        [line.set_clip_on(True) for line in tp.head]
+        [line.set_linewidth(linewidth) for line in tp.head]

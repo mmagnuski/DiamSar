@@ -275,6 +275,88 @@ def _deal_with_confounds(data):
     return residuals
 
 
+def agg_ch_pair_esci(paths, eff='d', progressbar='text'):
+    from sarna.utils import progressbar as pbarobj
+    ch_pairs = ['F3 - F4', 'F7 - F8']
+    stat_fun = (_compute_stats_group if eff == 'd'
+                else _compute_stats_regression)
+    contrasts = ['cvsd', 'cvsc'] if eff == 'd' else ['dreg', 'cdreg']
+
+    distributions = dict()
+    df = pd.DataFrame(columns=['contrast', 'N', 'space', 'confounds', 'pair',
+                               'ES', 'CI', 'CI low', 'CI high'])
+
+    df_idx = 1
+    pbar = pbarobj(progressbar, total=16)
+    for contrast in contrasts:
+        for space in ['avg', 'csd']:
+            for confounds in [False, True]:
+                # get relevant data
+                data1, data2, studies, _ = _aggregate_studies(
+                    paths, space, contrast, confounds=confounds)
+                n = (data1.shape[0] if 'reg' in contrast
+                     else '{} vs {}'.format(data1.shape[0], data2.shape[0]))
+
+                # channel pair loop
+                for ch_idx in range(2):
+                    ch_pair = ch_pairs[ch_idx]
+
+                    # compute es, bootstrap esci and bf01
+                    stats = stat_fun(data1, data2, ch_idx=ch_idx)
+                    pbar.update(1)
+
+                    # put into the dataframe
+                    df.loc[df_idx, 'contrast'] = contrast
+                    df.loc[df_idx, 'N'] = n
+                    df.loc[df_idx, 'space'] = space
+                    df.loc[df_idx, 'pair'] = ch_pair
+                    df.loc[df_idx, 'confounds'] = confounds
+
+                    ci_string = '[{:.3f}, {:.3f}]'.format(*stats['ci'])
+                    df.loc[df_idx, 'ES'] = stats['es']
+                    df.loc[df_idx, 'CI'] = ci_string
+                    df.loc[df_idx, 'CI low'] = stats['ci'][0]
+                    df.loc[df_idx, 'CI high'] = stats['ci'][1]
+                    df.loc[df_idx, 'BF01'] = stats['bf01']
+                    df_idx += 1
+
+                    dist_key = '-'.join([contrast, space, ch_pair])
+                    distributions[dist_key] = stats['bootstraps']
+    pbar.close()
+    return df, distributions
+
+
+def _compute_stats_group(high, low, ch_idx=0):
+    '''Used when plotting aggregated channel pairs figures
+    (``plot_aggregated``).'''
+    import pingouin as pg
+    from scipy.stats import ttest_ind
+
+    stats = esci_indep_cohens_d(high[:, ch_idx], low[:, ch_idx])
+
+    nx, ny = high.shape[0], low.shape[0]
+    t, p = ttest_ind(high[:, ch_idx], low[:, ch_idx])
+    out = pg.bayesfactor_ttest(t, nx, ny, paired=False)
+    bf01 = 1 / float(out)
+    stats.update({'bf01': bf01})
+
+    return stats
+
+
+def _compute_stats_regression(data1, data2, ch_idx=0):
+    '''Used when plotting aggregated channel pairs figures
+    (``plot_aggregated``).'''
+    import pingouin as pg
+    stats = esci_regression_r(data1[:, ch_idx], data2)
+
+    nx = data1.shape[0]
+    out = pg.bayesfactor_pearson(stats['es'], nx)
+    bf01 = 1 / float(out)
+    stats.update({'bf01': bf01})
+
+    return stats
+
+
 def esci_indep_cohens_d(data1, data2, n_boot=5000, has_preds=False):
     '''Compute Cohen's d effect size and its bootstrap 95% confidence interval.
     (using bias corrected accelerated bootstrap).

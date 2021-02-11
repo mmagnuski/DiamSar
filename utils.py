@@ -262,8 +262,8 @@ def reformat_stat_table(tbl):
 
     firstcols = ['contrast', 'study', 'space']
     for col in firstcols:
-        if col in columns:
-            columns.remove(col)
+        if col not in columns:
+            firstcols.remove(col)
 
     col_ord = firstcols + columns[2:]
     if 'space' not in tbl:
@@ -279,14 +279,16 @@ def reformat_stat_table(tbl):
     for idx in tbl2.index:
         if 'reg' in tbl2.loc[idx, 'contrast']:
             tbl2.loc[idx, 'N'] = str(tbl.loc[idx, 'N_all'])
-        else:
+        elif 'N_low' in tbl.columns:
             n_l, n_h = tbl.loc[idx, ['N_low', 'N_high']]
             tbl2.loc[idx, 'N'] = '{:0.0f} vs {:0.0f}'.format(n_h, n_l)
+        else:
+            tbl2.loc[idx, 'N'] = str(tbl.loc[idx, 'N_all'])
 
     # sorting
     # -------
     sort_cols = ['contrast', 'study', 'space']
-    sort_cols = sort_cols if 'space' in tbl else sort_cols[:-1]
+    sort_cols = [col for col in sort_cols if col in tbl2.columns]
     tbl2 = tbl2.sort_values(sort_cols)
     contrast_ord = ['cvsd', 'cvsc', 'cdreg', 'dreg', 'creg']
 
@@ -305,7 +307,8 @@ def reformat_stat_table(tbl):
         tbl2.loc[idx, 'contrast'] = new_con
 
         # rename study A -> I etc.
-        tbl2.loc[idx, 'study'] = translate_study[tbl2.loc[idx, 'study']]
+        if 'study' in tbl2.columns:
+            tbl2.loc[idx, 'study'] = translate_study[tbl2.loc[idx, 'study']]
 
         # nan -> NA
         if has_clusters:
