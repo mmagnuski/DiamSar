@@ -2,9 +2,7 @@ import os
 import os.path as op
 import numpy as np
 import pandas as pd
-
 import mne
-from borsar.cluster import construct_adjacency_matrix
 
 from . import pth, io, utils
 

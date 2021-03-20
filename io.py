@@ -10,6 +10,8 @@ from scipy import sparse
 import pandas as pd
 import mne
 
+from borsar.cluster import construct_adjacency_matrix
+
 
 # load functions
 # --------------
