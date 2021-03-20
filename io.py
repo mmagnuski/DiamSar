@@ -216,7 +216,7 @@ def make_sure_diagnosis_is_boolean(bdi):
 def prepare_data(paths, study='C', contrast='cvsd', eyes='closed', space='avg',
                  freq_range=(8, 13), avg_freq=True, selection='frontal_asy',
                  div_by_sum=False, transform='log', confounds=False,
-                 scale_psd=False, verbose=True):
+                 scale_psd=False, interaction=False, verbose=True):
     '''Get and prepare data for analysis.
 
     Parameters
@@ -321,6 +321,9 @@ def prepare_data(paths, study='C', contrast='cvsd', eyes='closed', space='avg',
         Whether to center and scale (z-score) the biological data (power
         spectra). This step is done after asymmetry computation and
         log-transform.
+    interaction : bool
+        Whether to return diagnosis * gender (or diagnosis * bdi) interaction
+        variable in the predictors table.
     verbose : bool | int
         Verbosity level supported by mne-python. ``True`` by default.
 
@@ -331,6 +334,10 @@ def prepare_data(paths, study='C', contrast='cvsd', eyes='closed', space='avg',
     '''
     from .utils import group_bdi, recode_variables
     from .freq import format_psds
+
+    if interaction and not confounds:
+        raise ValueError("Performing gender * diagnosis interaction requires "
+                         "confounds=True")
 
     data = dict()
     # get base study name and setup stat_info dict
@@ -399,7 +406,8 @@ def prepare_data(paths, study='C', contrast='cvsd', eyes='closed', space='avg',
 
         # we include confounds in the regression analysis
         bdi, hilo = recode_variables(grp['beh'], data=hilo,
-                                     use_bdi='reg' in contrast)
+                                     use_bdi='reg' in contrast,
+                                     interaction=interaction)
         # calculate N
         N_all = bdi.shape[0]
         stat_info['N_all'] = N_all

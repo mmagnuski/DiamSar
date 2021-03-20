@@ -10,7 +10,8 @@ from . import pth, io, utils
 def run_analysis(study='C', contrast='cvsd', eyes='closed', space='avg',
                  freq_range=(8, 13), avg_freq=True, selection='frontal_asy',
                  div_by_sum=False, transform='log', n_permutations=10000,
-                 cluster_p_threshold=0.05, confounds=False, verbose=True):
+                 cluster_p_threshold=0.05, confounds=False, interaction=False,
+                 verbose=True):
     '''Run DiamSar analysis with specified parameters.
 
     Parameters
@@ -116,6 +117,11 @@ def run_analysis(study='C', contrast='cvsd', eyes='closed', space='avg',
         some of the datasets I - III hosted on Dryad (Dryad does not allow
         more than 3 variables per participant to avoid the possibility of
         individual identification).
+    interaction : bool
+        Whether to perform gender * diagnosis or gender * bdi interaction
+        analysis. If ``interaction`` is set to True the returned results
+        (t values / t value maps) represent only the interaction term.
+        Defaults to False.
     verbose : bool | int
         Verbosity level supported by mne-python. ``True`` by default.
 
@@ -127,10 +133,11 @@ def run_analysis(study='C', contrast='cvsd', eyes='closed', space='avg',
         correct for multiple comparisons and a dictionary of results is
         returned for this contrast.
     '''
-
+    scale_psd = False
     data = io.prepare_data(
         pth.paths, study, contrast, eyes, space, freq_range, avg_freq,
-        selection, div_by_sum, transform, confounds, verbose)
+        selection, div_by_sum, transform, confounds, scale_psd, interaction,
+        verbose)
     return _conduct_analysis(data, contrast, space,avg_freq, selection,
                              n_permutations, cluster_p_threshold, confounds,
                              verbose)

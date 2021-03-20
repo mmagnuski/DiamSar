@@ -137,7 +137,11 @@ def _check_threshold(thresh, values, default):
     return thresh
 
 
-def recode_variables(beh, use_bdi=False, data=None, warn_prop_missing=0.05):
+# - [ ] this function is specific to the published paper, would have to
+#       be changed to work with additional datasets. This would need:
+#       * adding study argument / registering in get_data?
+def recode_variables(beh, use_bdi=False, data=None, interaction=False,
+                     warn_prop_missing=0.05):
     '''Recode and rescale variables in full behavioral dataframes for
     regression analyses that take confounds into account.
     Scaling continuous variables by 2SDs and leaving dummy variables intact
@@ -162,6 +166,10 @@ def recode_variables(beh, use_bdi=False, data=None, warn_prop_missing=0.05):
         This necessitates removal of corresponding rows from electro-
         physiological data. Data passed to this argument will be also returned
         as the second output of the function.
+    interaction : bool
+        Whether to compute interaction with gender. This creates
+        ``'interaction'`` column with gender * diagnosis (or gender * bdi if
+        ``use_bdi`` is ``True``) as data. Defaults to False.
     warn_prop_missing : float
         Raise a warning higher proportion of rows are removed from the data.
 
@@ -244,6 +252,12 @@ def recode_variables(beh, use_bdi=False, data=None, warn_prop_missing=0.05):
     # standardize bdi
     if use_bdi:
         beh.loc[:, bdi_col] = zscore(beh.loc[:, bdi_col])
+
+    # create interaction term if needed
+    if interaction:
+        sel_cols += ['interaction']
+        pred_col = bdi_col if use_bdi else 'DIAGNOZA'
+        beh.loc[:, 'interaction'] = beh.sex * beh[pred_col]
 
     if data is None:
         return beh.loc[:, sel_cols]
