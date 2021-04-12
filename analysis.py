@@ -220,11 +220,29 @@ def _conduct_analysis(data, contrast, space, avg_freq, selection,
 
 
 def _aggregate_studies(paths, space, contrast, selection='asy_pairs',
-                       confounds=False):
+                       confounds=False, interaction=False):
     '''
     Read all studies that include given contrast and aggregate their data.
-
     Used when plotting aggregated channel pairs figures (``plot_aggregated``).
+
+    Returns
+    -------
+    high : np.array
+        Aggregated psds for the diagnosed or subclinical group if ``'cvsd'```
+        or ``'cvsc'`` contrast is used. When a regression contrast is used this
+        variable contains all psds.
+    low : np.array
+        Aggregated psds for the healthy controls ``'cvsd'``` or ``'cvsc'``
+        contrast is used. When a regression contrast is used this variable
+        contains the predictor variable.
+    studies : list of str
+        Translated study names included in the aggregated data.
+    grouping : array of bool
+        Grouping information - we need to retain this when bootstrapping
+        gender x diagnosis interaction.
+    data : dict
+        Dictionary of data-relevant information (for example adjacency) that
+        is used in ``_conduct_analysis``.
     '''
     from .utils import translate_study
 
@@ -235,41 +253,55 @@ def _aggregate_studies(paths, space, contrast, selection='asy_pairs',
     elif contrast ==  'cdreg':
         studies = ['A', 'C', 'D', 'E']
 
+    grouping = list()
     psds = {'high': list(), 'low': list()}
     for study in studies:
         data = io.prepare_data(paths, selection=selection, study=study,
                                space=space, contrast=contrast, scale_psd=True,
-                               confounds=confounds)
+                               confounds=confounds, interaction=interaction)
         # deal with confounds
         if confounds:
             from scipy.stats import zscore
             residuals = _deal_with_confounds(data)
             residuals = zscore(residuals, axis=0)
             data['hilo'] = residuals
+
+            # make sure we retain grouping info (this is used
+            # when bootstrapping interaction effect size)
             if 'reg' not in contrast:
-                grp = data['bdi'][:, -1] > 0
-                data['hi'] = residuals[grp]
-                data['lo'] = residuals[~grp]
+                idx = -1 if not interaction else -2
+                grp = data['bdi'][:, idx] > 0
+                if not interaction:
+                    data['hi'] = residuals[grp]
+                    data['lo'] = residuals[~grp]
             data['bdi'] = data['bdi'][:, -1]
 
-        elif 'reg' in contrast:
+        if 'reg' in contrast:
             # we have to standardize depression scores
             # (different scales for BDI and PHQ-9)
             from scipy.stats import zscore
             data['bdi'] = zscore(data['bdi'])
 
-        if 'reg' not in contrast:
-            psds['low'].append(data['lo'])
+        # package output data
+        if 'reg' not in contrast and not interaction:
             psds['high'].append(data['hi'])
+            psds['low'].append(data['lo'])
         else:
-            psds['low'].append(data['bdi'])
             psds['high'].append(data['hilo'])
+            psds['low'].append(data['bdi'])
+        if interaction and 'reg' not in contrast:
+            grouping.append(grp)
 
     low = np.concatenate(psds['low'], axis=0)
     high = np.concatenate(psds['high'], axis=0)
 
+    if interaction and 'reg' not in contrast:
+        grouping = np.concatenate(grouping, axis=0)
+    else:
+        grouping = None
+
     studies = [translate_study[std] for std in studies]
-    return high, low, studies, data
+    return high, low, studies, grouping, data
 
 
 def _deal_with_confounds(data):
@@ -384,6 +416,140 @@ def esci_regression_r(x, y, n_boot=5000):
     # when/if it gets accepted
     r_ci, bootstraps = boot.ci((x, y), corr, multi=True, n_samples=n_boot,
                                return_dist=True)
+    stats.update(bootstraps=bootstraps)
+    stats.update(es=r, ci=r_ci)
+    return stats
+
+
+# There were problems bootstrapping partial eta squared (stability warnings),
+# so we don't use it in the paper
+def esci_partial_eta_sq(x, y, n_boot=5000, grp=None):
+    '''Compute partial Eta squared effect size and its bootstrap 95% confidence
+    interval (using bias corrected accelerated bootstrap).
+    This function is used for estimating the effect size of the interaction.
+
+    Parameters
+    ----------
+    x : np.ndarray
+        Predictors - one or two-dimensional array of values for the
+        correlation. If predictors are two-dimensional the last column is
+        treated as the predictor of interest and the rest as confounds.
+    y : np.ndarray
+        Dependent variable. One dimensional array of values for the
+        correlation.
+    n_boot : int
+        Number of bootstraps to use.
+
+    Returns
+    -------
+    stats : dict
+        Dictionary of results.
+        * ``stats['es']`` contains effect size.
+        * ``stats['ci']`` contains 95% confidence interval for the effect size.
+        * ``stats['bootstraps']`` contains bootstrap effect size values.
+    '''
+    import statsmodels.api as sm
+    import statsmodels.formula.api as smf
+    import scikits.bootstrap as boot
+
+    def paretasq(x, y):
+        # create a dataframe and fit linear model
+        df = pd.DataFrame({'y': y, 'x': x})
+        lm = smf.ols('y ~ x', data=df).fit()
+
+        # we use type II sum of squares, but it doesn't matter because we have
+        # only one predictor and dependent data are residuals after accounting
+        # for the variation explained by the other predictors
+        table = sm.stats.anova_lm(lm, typ=2)
+
+        # we calculate partial eta squared
+        SS_effect = table.loc['x', 'sum_sq']
+        SS_error = table.loc['Residual', 'sum_sq']
+        partial_eta_sq = SS_effect / (SS_effect + SS_error)
+        return partial_eta_sq
+
+    # when the interaction is with diagnosis-like factor we need to sample
+    # from diagnosis groups (but we treat sex as random)
+    if grp is None:
+        eta = paretasq(x, y)
+        eta_ci, bootstraps = boot.ci((x, y), paretasq, multi=True,
+                                     n_samples=n_boot, return_dist=True)
+    else:
+        gr1 = np.stack([x[grp], y[grp]], axis=1)
+        gr2 = np.stack([x[~grp], y[~grp]], axis=1)
+        def statfun(gr1, gr2):
+            xy = np.concatenate([gr1, gr2], axis=0)
+            x, y = xy[:, 0], xy[:, 1]
+            return paretasq(x, y)
+
+        eta = paretasq(x, y)
+        eta_ci, bootstraps = boot.ci((gr1, gr2), statfun, multi='independent',
+                                     n_samples=n_boot,
+                                     return_dist=True)
+
+    stats = dict()
+    stats.update(bootstraps=bootstraps)
+    stats.update(es=eta, ci=eta_ci)
+    return stats
+
+
+def esci_interaction_regression_r(x, y, n_boot=5000, grp=None):
+    '''Compute correlation coefficeint effect size and its bootstrap 95%
+    confidence interval (using bias corrected accelerated bootstrap).
+    This function is used for estimating the effect size of the interaction.
+    (this function is used over ``esci_regression_r`` due to some limitations
+     of current implementation of how data are handled when aggregating
+     studies)
+
+    Parameters
+    ----------
+    x : np.ndarray
+        Predictors - one or two-dimensional array of values for the
+        correlation. If predictors are two-dimensional the last column is
+        treated as the predictor of interest and the rest as confounds.
+    y : np.ndarray
+        Dependent variable. One dimensional array of values for the
+        correlation.
+    n_boot : int
+        Number of bootstraps to use.
+    grp : bool array | None
+        If not ``None`` then it means some grouping should be used during
+        bootstrapping - the two groups (for example diagnosed vs ).
+
+    Returns
+    -------
+    stats : dict
+        Dictionary of results.
+        * ``stats['es']`` contains effect size.
+        * ``stats['ci']`` contains 95% confidence interval for the effect size.
+        * ``stats['bootstraps']`` contains bootstrap effect size values.
+    '''
+    from scipy.stats import pearsonr
+    import scikits.bootstrap as boot
+
+    def corr(x, y):
+        return pearsonr(x, y)[0]
+
+    # when the interaction is with diagnosis-like factor we need to sample
+    # from diagnosis groups (but we treat sex as random)
+    if grp is None:
+        multi = True
+        x_, y_ = x, y
+        statfun = corr
+    else:
+        multi = 'independent'
+        x_ = np.stack([x[grp], y[grp]], axis=1)
+        y_ = np.stack([x[~grp], y[~grp]], axis=1)
+        def statfun(gr1, gr2):
+            xy = np.concatenate([gr1, gr2], axis=0)
+            x, y = xy[:, 0], xy[:, 1]
+            return corr(x, y)
+
+    r = statfun(x_, y_)
+    r_ci, bootstraps = boot.ci((x_, y_), statfun, multi=multi,
+                                 n_samples=n_boot, return_dist=True)
+
+    stats = dict()
     stats.update(bootstraps=bootstraps)
     stats.update(es=r, ci=r_ci)
     return stats

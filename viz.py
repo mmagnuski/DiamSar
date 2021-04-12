@@ -762,7 +762,8 @@ def _create_group_rectangles(bar1y, bar2y, bar_h, second_min_diag_bdi,
     return [rct1, rct2, rct3, rct4]
 
 
-def plot_aggregated(paths, ax=None, eff='d', confounds=False):
+def plot_aggregated(paths, ax=None, eff='d', confounds=False,
+                    interaction=False):
     '''Plot aggregated effect sizes, confidence intervals and bayes factors for
     channel pairs analyses.
 
@@ -793,7 +794,8 @@ def plot_aggregated(paths, ax=None, eff='d', confounds=False):
 
     # 'd' vs 'r' effect size (group contrasts vs linear relationships)
     addpos = 0.09 if eff == 'd' else 0.065
-    stat_fun = (_compute_stats_group if eff == 'd'
+    stat_fun = (_compute_stats_interaction if interaction
+                else _compute_stats_group if eff == 'd'
                 else _compute_stats_regression)
     distr_color = (colors['hc'] if eff == 'd' else colors['subdiag'])
     contrasts = ['cvsd', 'cvsc'] if eff == 'd' else ['dreg', 'cdreg']
@@ -802,13 +804,14 @@ def plot_aggregated(paths, ax=None, eff='d', confounds=False):
     for contrast in contrasts:
         for space in ['avg', 'csd']:
             # get relevant data
-            data1, data2, studies, _ = _aggregate_studies(
-                paths, space, contrast, confounds=confounds)
+            data1, data2, studies, grp, _ = _aggregate_studies(
+                paths, space, contrast, confounds=confounds,
+                interaction=interaction)
 
             # channel pair loop
             for ch_idx in range(2):
                 # compute es, bootstrap esci and bf01
-                stats = stat_fun(data1, data2, ch_idx=ch_idx)
+                stats = stat_fun(data1, data2, ch_idx=ch_idx, grp=grp)
 
                 # plot distribution, ES and CI
                 v = _plot_dist_esci(ax, ypos, stats, color=distr_color)
@@ -830,20 +833,23 @@ def plot_aggregated(paths, ax=None, eff='d', confounds=False):
                 labels.append(label)
 
                 # add bf01 text:
-                bf_text = '{:.2f}'.format(stats['bf01'])
-                ax.text(stats['es'], ypos + addpos, bf_text, fontsize=16,
-                        horizontalalignment='center', color='w', zorder=7)
+                if stats['bf01'] is not None:
+                    bf_text = '{:.2f}'.format(stats['bf01'])
+                    ax.text(stats['es'], ypos + addpos, bf_text, fontsize=16,
+                            horizontalalignment='center', color='w', zorder=7)
 
                 ypos -= 0.5
 
     # aesthetics
     # ----------
-    lims = (-1.25, 1.25) if eff == 'd' else (-0.7, 0.7)
-    xticks = ([-1, -0.5, 0, 0.5, 1] if eff == 'd'
+    condition = eff == 'd' and not interaction
+    lims = ((-1.25, 1.25) if condition else (-0.7, 0.7))
+    xticks = ([-1, -0.5, 0, 0.5, 1] if condition
               else [-0.6, -0.3, 0, 0.3, 0.6])
-    xlab = ("Effect size\n(Cohen's d)" if eff == 'd'
+    xlab = ("Effect size\n(Cohen's d)" if condition
             else "Effect size\n(Pearson's r)")
-    cntr = 'group contrasts' if eff == 'd' else 'linear relationships'
+    cntr = ('interaction' if interaction else 'group contrasts' if eff == 'd'
+            else 'linear relationships')
 
     ax.set_xlim(lims)
     plt.yticks(labels_pos, labels, fontsize=15)
@@ -860,7 +866,7 @@ def plot_aggregated(paths, ax=None, eff='d', confounds=False):
     return ax
 
 
-def _compute_stats_group(high, low, ch_idx=0):
+def _compute_stats_group(high, low, ch_idx=0, grp=None):
     '''Used when plotting aggregated channel pairs figures
     (``plot_aggregated``).'''
     import pingouin as pg
@@ -878,11 +884,28 @@ def _compute_stats_group(high, low, ch_idx=0):
     return stats
 
 
-def _compute_stats_regression(data1, data2, ch_idx=0):
+def _compute_stats_regression(data1, data2, ch_idx=0, grp=None):
     '''Used when plotting aggregated channel pairs figures
     (``plot_aggregated``).'''
     import pingouin as pg
     stats = analysis.esci_regression_r(data1[:, ch_idx], data2)
+
+    nx = data1.shape[0]
+    out = pg.bayesfactor_pearson(stats['es'], nx)
+    bf01 = 1 / float(out)
+    stats.update({'bf01': bf01})
+
+    return stats
+
+
+def _compute_stats_interaction(data1, data2, ch_idx=0, grp=None):
+    '''Used when plotting aggregated channel pairs figures
+    (``plot_aggregated``).'''
+    import pingouin as pg
+
+    # stats = analysis.esci_partial_eta_sq(data1[:, ch_idx], data2, grp=grp)
+    stats = analysis.esci_interaction_regression_r(data1[:, ch_idx], data2,
+                                                   grp=grp)
 
     nx = data1.shape[0]
     out = pg.bayesfactor_pearson(stats['es'], nx)
