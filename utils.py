@@ -16,6 +16,10 @@ hc_sub_mid = np.average(np.stack([graycol, hc_sub_mid], axis=0),
                         axis=0, weights=[0.7, 0.3])
 colors['mid'] = hc_sub_mid
 colors['gray'] = graycol
+
+colors['mint1'] = tuple(np.array([0, 171, 171]) / 255)
+colors['mint2'] = tuple(np.array([67, 187, 141]) / 255)
+
 del hc_sub_mid, graycol, col
 
 translate_study = dict(A='I', B='II', C='III', D='IV', E='V')

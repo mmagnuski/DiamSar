@@ -161,7 +161,31 @@ def plot_grid_cluster(stats_clst, contrast, vlim=3, show_unavailable=False):
 
 
 def plot_multi_topo(psds_avg, info_frontal, info_asy):
-    '''Creating combined Topo object for multiple psds.'''
+    '''Plot group-specific topographies of average psd and average psd
+    asymmetry
+
+    Parameters
+    ----------
+    psds_avg: list | np.array
+        List of average psds for:
+        * ``psds_avg[0]``: average psd for diagnosed group
+        * ``psds_avg[1]``: average psd for control group
+        * ``psds_avg[2]``: average psd asymmetry for diagnosed group
+        * ``psds_avg[3]``: average psd asymmetry for control group
+    info_frontal: mne.Info
+        Info for picked frontal channels corresponding to length of each psd
+        (``pasds_avg[0]`` and ``pasds_avg[1]``).
+    info_asy: mne.Info
+        Info for asymmetry frontal channels corresponding to length of each psd
+        asymmetry (``pasds_avg[2]`` and ``pasds_avg[3]``).
+
+    Returns
+    -------
+    fig : matplotlib Figure
+        Plot figure.
+    ax : np.array
+        Array of matplotlib axes.
+    '''
     axis_limit = 2.25
     fig = plt.figure(figsize=(7, 6))
     axs = prepare_equal_axes(fig, [2, 2], space=[0.12, 0.8, 0.02, 0.85],
@@ -773,6 +797,8 @@ def plot_aggregated(paths, ax=None, eff='d', confounds=False,
         Effect size to plot. ``'r'`` shows effects for linear relationship
         analyses with Pearson's r as the effect size. ``'d'`` shows effects for
         group contrasts with Cohen's d as the effect size. Defaults to ``'d'``.
+    confounds : FIXME
+    interaction : FIXME
 
     Returns
     -------
