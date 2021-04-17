@@ -160,7 +160,7 @@ def plot_grid_cluster(stats_clst, contrast, vlim=3, show_unavailable=False):
     return fig
 
 
-def plot_multi_topo(psds_avg, info_frontal, info_asy):
+def plot_multi_topo(psds_avg, info_frontal, info_asy, ax_limit=0.13):
     '''Plot group-specific topographies of average psd and average psd
     asymmetry
 
@@ -186,13 +186,12 @@ def plot_multi_topo(psds_avg, info_frontal, info_asy):
     ax : np.array
         Array of matplotlib axes.
     '''
-    axis_limit = 2.25
-    fig = plt.figure(figsize=(7, 6))
+    fig = plt.figure(figsize=(7, 5.5))
     axs = prepare_equal_axes(fig, [2, 2], space=[0.12, 0.8, 0.02, 0.85],
-                             h_dist=0.05, w_dist=0.05)
+                             h_dist=0.015, w_dist=0.05)
 
     topos = list()
-    topomap_args = dict(extrapolate='head', outlines='skirt', border='mean')
+    topomap_args = dict(extrapolate='local', border='mean')
 
     for val, ax in zip(psds_avg[:2], axs[0, :]):
         topos.append(Topo(val, info_frontal, cmap='Reds', vmin=-28, vmax=-26,
@@ -206,9 +205,13 @@ def plot_multi_topo(psds_avg, info_frontal, info_asy):
         tp.solid_lines()
         tp.axes.scatter(*tp.chan_pos.T, facecolor='k', s=8)
 
-    for ax in axs.ravel():
-        ax.set_ylim((-axis_limit, axis_limit))
-        ax.set_xlim((-axis_limit, axis_limit))
+    for ax in axs[0, :]:
+        ax.set_ylim((-ax_limit, ax_limit))
+        ax.set_xlim((-ax_limit, ax_limit))
+
+    for tp in topos[2:]:
+        lims = (-0.23 * ax_limit, ax_limit)
+        zoom_topo(tp, lims, lims)
 
     cbar_ax = [fig.add_axes([0.82, 0.43, 0.03, 0.3]),
                fig.add_axes([0.82, 0.08, 0.03, 0.3])]
@@ -221,7 +224,7 @@ def plot_multi_topo(psds_avg, info_frontal, info_asy):
     axs[0, 0].set_ylabel('alpha\npower', fontsize=20, labelpad=7)
     axs[1, 0].set_ylabel('alpha\nasymmetry', fontsize=20, labelpad=7)
     cbar_ax[0].set_ylabel('log(alpha power)', fontsize=16, labelpad=10)
-    cbar_ax[1].set_ylabel('alpha power', fontsize=16, labelpad=10)
+    cbar_ax[1].set_ylabel('asymmetry', fontsize=16, labelpad=10)
 
     # correct cbar position with respect to the topo axes
     fig.canvas.draw()
