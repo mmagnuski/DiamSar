@@ -135,15 +135,11 @@ def summarize_stats_pairs(reduce_columns=True, stat_dir='stats',
             df.loc[idx, col] = stat[col] if col in stat else np.nan
 
         # for ES and CI we need the original data:
-        params = ['study', 'space', 'contrast', 'eyes']
-        study, space, contrast, eyes = [stat[param] for param in params]
-        data = io.prepare_data(
-            pth.paths, study=study, contrast=contrast, eyes=eyes, space=space,
-            freq_range=params['freq_range'], avg_freq,
-            selection, div_by_sum, transform, confounds, verbose)
-        data = run_analysis(selection='asy_pairs', study=study,
-                            space=space, contrast=contrast,
-                            confounds=confounds, return_data=True)
+        sel_keys = ['study', 'contrast', 'eyes', 'space', 'freq_range',
+                    'avg_freq', 'selection', 'div_by_sum', 'transform']
+        kwargs = {key: stat[key] for key in sel_keys}
+        data = io.prepare_data(pth.paths, confounds=confounds, verbose=False,
+                               **kwargs)
 
         # add stats
         for ch_idx in range(2):
