@@ -220,7 +220,7 @@ def _conduct_analysis(data, contrast, space, avg_freq, selection,
 
 
 def _aggregate_studies(paths, space, contrast, selection='asy_pairs',
-                       confounds=False, interaction=False):
+                       confounds=False, interaction=False, studies=None):
     '''
     Read all studies that include given contrast and aggregate their data.
     Used when plotting aggregated channel pairs figures (``plot_aggregated``).
@@ -246,12 +246,13 @@ def _aggregate_studies(paths, space, contrast, selection='asy_pairs',
     '''
     from .utils import translate_study
 
-    if contrast in ['cvsd', 'dreg']:
-        studies = ['A', 'C', 'D', 'E']
-    elif contrast in ['cvsc', 'creg']:
-        studies = ['B', 'C', 'D']
-    elif contrast ==  'cdreg':
-        studies = ['A', 'C', 'D', 'E']
+    if studies is None:
+        if contrast in ['cvsd', 'dreg']:
+            studies = ['A', 'C', 'D', 'E']
+        elif contrast in ['cvsc', 'creg']:
+            studies = ['B', 'C', 'D']
+        elif contrast ==  'cdreg':
+            studies = ['A', 'C', 'D', 'E']
 
     grouping = list()
     psds = {'high': list(), 'low': list()}
