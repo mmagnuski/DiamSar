@@ -160,15 +160,38 @@ def plot_grid_cluster(stats_clst, contrast, vlim=3, show_unavailable=False):
     return fig
 
 
-def plot_multi_topo(psds_avg, info_frontal, info_asy):
-    '''Creating combined Topo object for multiple psds.'''
-    axis_limit = 2.25
-    fig = plt.figure(figsize=(7, 6))
+def plot_multi_topo(psds_avg, info_frontal, info_asy, ax_limit=0.13):
+    '''Plot group-specific topographies of average psd and average psd
+    asymmetry
+
+    Parameters
+    ----------
+    psds_avg: list | np.array
+        List of average psds for:
+        * ``psds_avg[0]``: average psd for diagnosed group
+        * ``psds_avg[1]``: average psd for control group
+        * ``psds_avg[2]``: average psd asymmetry for diagnosed group
+        * ``psds_avg[3]``: average psd asymmetry for control group
+    info_frontal: mne.Info
+        Info for picked frontal channels corresponding to length of each psd
+        (``pasds_avg[0]`` and ``pasds_avg[1]``).
+    info_asy: mne.Info
+        Info for asymmetry frontal channels corresponding to length of each psd
+        asymmetry (``pasds_avg[2]`` and ``pasds_avg[3]``).
+
+    Returns
+    -------
+    fig : matplotlib Figure
+        Plot figure.
+    ax : np.array
+        Array of matplotlib axes.
+    '''
+    fig = plt.figure(figsize=(7, 5.5))
     axs = prepare_equal_axes(fig, [2, 2], space=[0.12, 0.8, 0.02, 0.85],
-                             h_dist=0.05, w_dist=0.05)
+                             h_dist=0.015, w_dist=0.05)
 
     topos = list()
-    topomap_args = dict(extrapolate='head', outlines='skirt', border='mean')
+    topomap_args = dict(extrapolate='local', border='mean')
 
     for val, ax in zip(psds_avg[:2], axs[0, :]):
         topos.append(Topo(val, info_frontal, cmap='Reds', vmin=-28, vmax=-26,
@@ -182,9 +205,13 @@ def plot_multi_topo(psds_avg, info_frontal, info_asy):
         tp.solid_lines()
         tp.axes.scatter(*tp.chan_pos.T, facecolor='k', s=8)
 
-    for ax in axs.ravel():
-        ax.set_ylim((-axis_limit, axis_limit))
-        ax.set_xlim((-axis_limit, axis_limit))
+    for ax in axs[0, :]:
+        ax.set_ylim((-ax_limit, ax_limit))
+        ax.set_xlim((-ax_limit, ax_limit))
+
+    for tp in topos[2:]:
+        lims = (-0.23 * ax_limit, ax_limit)
+        zoom_topo(tp, lims, lims)
 
     cbar_ax = [fig.add_axes([0.82, 0.43, 0.03, 0.3]),
                fig.add_axes([0.82, 0.08, 0.03, 0.3])]
@@ -197,7 +224,7 @@ def plot_multi_topo(psds_avg, info_frontal, info_asy):
     axs[0, 0].set_ylabel('alpha\npower', fontsize=20, labelpad=7)
     axs[1, 0].set_ylabel('alpha\nasymmetry', fontsize=20, labelpad=7)
     cbar_ax[0].set_ylabel('log(alpha power)', fontsize=16, labelpad=10)
-    cbar_ax[1].set_ylabel('alpha power', fontsize=16, labelpad=10)
+    cbar_ax[1].set_ylabel('asymmetry', fontsize=16, labelpad=10)
 
     # correct cbar position with respect to the topo axes
     fig.canvas.draw()
@@ -762,7 +789,8 @@ def _create_group_rectangles(bar1y, bar2y, bar_h, second_min_diag_bdi,
     return [rct1, rct2, rct3, rct4]
 
 
-def plot_aggregated(paths, ax=None, eff='d', confounds=False):
+def plot_aggregated(paths, ax=None, eff='d', confounds=False,
+                    interaction=False, plot=True):
     '''Plot aggregated effect sizes, confidence intervals and bayes factors for
     channel pairs analyses.
 
@@ -772,6 +800,8 @@ def plot_aggregated(paths, ax=None, eff='d', confounds=False):
         Effect size to plot. ``'r'`` shows effects for linear relationship
         analyses with Pearson's r as the effect size. ``'d'`` shows effects for
         group contrasts with Cohen's d as the effect size. Defaults to ``'d'``.
+    confounds : FIXME
+    interaction : FIXME
 
     Returns
     -------
@@ -779,8 +809,9 @@ def plot_aggregated(paths, ax=None, eff='d', confounds=False):
         Axis used to plot to.
     '''
     from .analysis import _aggregate_studies
+    from .utils import translate_contrast
 
-    if ax is None:
+    if ax is None and plot:
         # create axis to plot to
         fig_size = (11, 13.5) if eff == 'r' else (11, 12)
         gridspec = ({'left': 0.25, 'bottom': 0.1, 'right': 0.85} if eff == 'r'
@@ -793,74 +824,104 @@ def plot_aggregated(paths, ax=None, eff='d', confounds=False):
 
     # 'd' vs 'r' effect size (group contrasts vs linear relationships)
     addpos = 0.09 if eff == 'd' else 0.065
-    stat_fun = (_compute_stats_group if eff == 'd'
+    stat_fun = (_compute_stats_interaction if interaction
+                else _compute_stats_group if eff == 'd'
                 else _compute_stats_regression)
     distr_color = (colors['hc'] if eff == 'd' else colors['subdiag'])
     contrasts = ['cvsd', 'cvsc'] if eff == 'd' else ['dreg', 'cdreg']
     ch_names = ['F3-F4', 'F7-F8']
 
+    tbl_idx = 0
+    table = pd.DataFrame(columns=['studies', 'contrast', 'confounds', 'pair',
+                                  'measure', 'ES', 'CI', 'BF01'])
+
+    measure_name = ("Cohen's d" if eff == 'd' and not interaction
+                    else "Pearson's r")
+
     for contrast in contrasts:
         for space in ['avg', 'csd']:
             # get relevant data
-            data1, data2, studies, _ = _aggregate_studies(
-                paths, space, contrast, confounds=confounds)
+            data1, data2, studies, grp, _ = _aggregate_studies(
+                paths, space, contrast, confounds=confounds,
+                interaction=interaction)
 
             # channel pair loop
             for ch_idx in range(2):
                 # compute es, bootstrap esci and bf01
-                stats = stat_fun(data1, data2, ch_idx=ch_idx)
+                stats = stat_fun(data1, data2, ch_idx=ch_idx, grp=grp)
 
-                # plot distribution, ES and CI
-                v = _plot_dist_esci(ax, ypos, stats, color=distr_color)
-                v['bodies'][0].set_zorder(4)
+                # fill table
+                studies_str = ', '.join(studies[:-1]) + ' & ' + studies[-1]
+                ci_str = '[{:.3f}, {:.3f}]'.format(*stats["ci"])
+                table.loc[tbl_idx, 'studies'] = studies_str
+                table.loc[tbl_idx, 'contrast'] = translate_contrast[contrast]
+                table.loc[tbl_idx, 'pair'] = ch_names[ch_idx]
+                table.loc[tbl_idx, 'ES'] = f'{stats["es"]:.3f}'
+                table.loc[tbl_idx, 'CI'] = ci_str
+                table.loc[tbl_idx, 'BF01'] = f'{stats["bf01"]:.3f}'
+                tbl_idx += 1
 
-                # slight y tick labeling differences
-                if len(studies) > 1:
-                    label_schematic = '{}, {}, {}\nstudies {}'
-                    studies_str = ', '.join(studies[:-1]) + ' & ' + studies[-1]
-                    label = label_schematic.format(
-                        utils.translate_contrast[contrast], space.upper(),
-                        ch_names[ch_idx], studies_str)
-                else:
-                    label = '{}, {}\n{}, study {}'.format(
-                        utils.translate_contrast[contrast], space.upper(),
-                        ch_names[ch_idx], studies[0])
+                if plot:
+                    # plot distribution, ES and CI
+                    v = _plot_dist_esci(ax, ypos, stats, color=distr_color)
+                    v['bodies'][0].set_zorder(4)
 
-                labels_pos.append(ypos)
-                labels.append(label)
+                    # slight y tick labeling differences
+                    if len(studies) > 1:
+                        label_schematic = '{}, {}, {}\nstudies {}'
+                        label = label_schematic.format(
+                            utils.translate_contrast[contrast], space.upper(),
+                            ch_names[ch_idx], studies_str)
+                    else:
+                        label = '{}, {}\n{}, study {}'.format(
+                            utils.translate_contrast[contrast], space.upper(),
+                            ch_names[ch_idx], studies[0])
 
-                # add bf01 text:
-                bf_text = '{:.2f}'.format(stats['bf01'])
-                ax.text(stats['es'], ypos + addpos, bf_text, fontsize=16,
-                        horizontalalignment='center', color='w', zorder=7)
+                    labels_pos.append(ypos)
+                    labels.append(label)
 
-                ypos -= 0.5
+                    # add bf01 text:
+                    if stats['bf01'] is not None:
+                        bf_text = '{:.2f}'.format(stats['bf01'])
+                        ax.text(stats['es'], ypos + addpos, bf_text,
+                                fontsize=16, color='w', zorder=7,
+                                horizontalalignment='center')
+
+                    ypos -= 0.5
+
+    table.loc[:, 'measure'] = measure_name
+    table.loc[:, 'confounds'] = confounds
 
     # aesthetics
     # ----------
-    lims = (-1.25, 1.25) if eff == 'd' else (-0.7, 0.7)
-    xticks = ([-1, -0.5, 0, 0.5, 1] if eff == 'd'
-              else [-0.6, -0.3, 0, 0.3, 0.6])
-    xlab = ("Effect size\n(Cohen's d)" if eff == 'd'
-            else "Effect size\n(Pearson's r)")
-    cntr = 'group contrasts' if eff == 'd' else 'linear relationships'
+    if plot:
+        condition = eff == 'd' and not interaction
+        lims = ((-1.25, 1.25) if condition else (-0.7, 0.7))
+        xticks = ([-1, -0.5, 0, 0.5, 1] if condition
+                  else [-0.6, -0.3, 0, 0.3, 0.6])
+        xlab = ("Effect size\n(Cohen's d)" if condition
+                else "Effect size\n(Pearson's r)")
+        cntr = ('interaction' if interaction else 'group contrasts'
+                if eff == 'd' else 'linear relationships')
 
-    ax.set_xlim(lims)
-    plt.yticks(labels_pos, labels, fontsize=15)
-    plt.xticks(xticks, fontsize=15)
-    ylim = ax.get_ylim()
+        ax.set_xlim(lims)
+        plt.yticks(labels_pos, labels, fontsize=15)
+        plt.xticks(xticks, fontsize=15)
+        ylim = ax.get_ylim()
 
-    ax.grid(color=[0.85, 0.85, 0.85], linewidth=1.5, linestyle='--')
-    ax.vlines(0, ymin=ylim[0], ymax=ylim[1], color=[0.5] * 3, lw=2.5)
-    ax.set_ylim(ylim) # make sure vlines do not change y lims
+        ax.grid(color=[0.85, 0.85, 0.85], linewidth=1.5, linestyle='--')
+        ax.vlines(0, ymin=ylim[0], ymax=ylim[1], color=[0.5] * 3, lw=2.5)
+        ax.set_ylim(ylim) # make sure vlines do not change y lims
 
-    ax.set_xlabel(xlab, fontsize=20)
-    ax.set_title('Aggregated channel pair results\nfor {}'.format(cntr),
-                 fontsize=24, pad=25)
-    return ax
+        ax.set_xlabel(xlab, fontsize=20)
+        ax.set_title('Aggregated channel pair results\nfor {}'.format(cntr),
+                     fontsize=24, pad=25)
+        return ax, table
+    else:
+        return table
 
 
-def _compute_stats_group(high, low, ch_idx=0):
+def _compute_stats_group(high, low, ch_idx=0, grp=None):
     '''Used when plotting aggregated channel pairs figures
     (``plot_aggregated``).'''
     import pingouin as pg
@@ -878,11 +939,28 @@ def _compute_stats_group(high, low, ch_idx=0):
     return stats
 
 
-def _compute_stats_regression(data1, data2, ch_idx=0):
+def _compute_stats_regression(data1, data2, ch_idx=0, grp=None):
     '''Used when plotting aggregated channel pairs figures
     (``plot_aggregated``).'''
     import pingouin as pg
     stats = analysis.esci_regression_r(data1[:, ch_idx], data2)
+
+    nx = data1.shape[0]
+    out = pg.bayesfactor_pearson(stats['es'], nx)
+    bf01 = 1 / float(out)
+    stats.update({'bf01': bf01})
+
+    return stats
+
+
+def _compute_stats_interaction(data1, data2, ch_idx=0, grp=None):
+    '''Used when plotting aggregated channel pairs figures
+    (``plot_aggregated``).'''
+    import pingouin as pg
+
+    # stats = analysis.esci_partial_eta_sq(data1[:, ch_idx], data2, grp=grp)
+    stats = analysis.esci_interaction_regression_r(data1[:, ch_idx], data2,
+                                                   grp=grp)
 
     nx = data1.shape[0]
     out = pg.bayesfactor_pearson(stats['es'], nx)
