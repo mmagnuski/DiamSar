@@ -561,7 +561,8 @@ def list_analyses(study=list('ABCDE'), contrast=['cvsc', 'cvsd', 'creg',
                   'cdreg', 'dreg'], eyes=['closed'], space=['avg', 'csd',
                   'src'], freq_range=[(8, 13)], avg_freq=[True, False],
                   selection=['asy_frontal', 'asy_pairs', 'all'],
-                  transform=['log'], confounds=[False], verbose=True):
+                  transform=['log'], confounds=[False], reduce_analyses=True,
+                  verbose=True):
     '''
     List all possible analyses for given set of parameter options.
     For explanation of the arguments see ``DiamSar.analysis.run_analysis``.
@@ -589,19 +590,20 @@ def list_analyses(study=list('ABCDE'), contrast=['cvsc', 'cvsd', 'creg',
     for std, cntr, eye, spc, frqrng, avgfrq, sel, trnsf, conf in prod:
         # averaging alpha frequency range is ommited only for wide frequency
         # range
-        if not avgfrq and not frqrng == (8, 13):
-            continue
+        if reduce_analyses:
+            if not avgfrq and not frqrng == (8, 13):
+                continue
 
-        # asymmetry pairs are always used with frequency averaging
-        if sel == 'asy_pairs' and not avgfrq:
-            continue
+            # asymmetry pairs are always used with frequency averaging
+            if sel == 'asy_pairs' and not avgfrq:
+                continue
+
+            # 'all' and 'frontal' selections are not used with frequency averaging
+            if sel in ['all', 'frontal'] and avgfrq:
+                continue
 
         # asymmetry pairs are not used in source space
         if sel == 'asy_pairs' and spc == 'src':
-            continue
-
-        # 'all' and 'frontal' selections are not used with frequency averaging
-        if sel in ['all', 'frontal'] and avgfrq:
             continue
 
         # non availability
