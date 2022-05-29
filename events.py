@@ -103,9 +103,9 @@ def fix_epochs(raw, events, tmin=-0.2, tmax=0.5):
 
 # FIXME
 # - [ ] change/clean up and test the FIX/CHECK part
-# - [ ] add metadata instead of complex event values
-def change_events_sternberg(events):
-    '''Add load info to maintenance onset fixations and probe events.
+# - [ ] add metadata instead of complex event values (!)
+def translate_events_sternberg(events):
+    '''Translate sternberg events to include information about load.
 
     Information about load can be now obtained from fixation event value by
     subtracting 100. For example fixation event `150` denotes fixation that
