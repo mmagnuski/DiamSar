@@ -170,7 +170,7 @@ def translate_events_sternberg(events):
         where_fix = where_fix[:min_ind * 2]
         is_maintenance_fix = is_maintenance_fix[:min_ind * 2]
         num_digits = num_digits[:min_ind]
-    num_digits = np.array(num_digits)
+    num_digits = np.array(num_digits, dtype=new_events.dtype)
 
     # add load info to maintenance fix
     new_events[where_fix[is_maintenance_fix], -1] += num_digits * 10
