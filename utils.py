@@ -39,7 +39,7 @@ def group_bdi(subj_id, beh, method='cvsc', lower_threshold=None,
         so we want to select a subsample of all subjects.
     beh : pandas DataFrame
         Dataframe with columns specifying BDI (either ``BDI-I``, ``BDI-II``
-        or ``PHQ-9``) and diagnosis status (``DIAGNOZA`` - boolean). The rows
+        or ``PHQ-9``) and diagnosis status (``diagnosis`` - boolean). The rows
         should be indexed with subject identifiers.
     method : string
         There are five possible methods available:
@@ -93,25 +93,25 @@ def group_bdi(subj_id, beh, method='cvsc', lower_threshold=None,
         raise ValueError('Unexpected method: {}'.format(method))
 
     if method == 'cvsc':
-        bdi_sel = beh.loc[~beh.DIAGNOZA, bdi_col].values
+        bdi_sel = beh.loc[~beh.diagnosis, bdi_col].values
         lower_threshold = _check_threshold(lower_threshold, bdi_sel, 5)
         higher_threshold = _check_threshold(higher_threshold, bdi_sel, 10)
 
-        selection_low = ~beh.DIAGNOZA & (beh[bdi_col] <= lower_threshold)
-        selection_high = ~beh.DIAGNOZA & (beh[bdi_col] > higher_threshold)
+        selection_low = ~beh.diagnosis & (beh[bdi_col] <= lower_threshold)
+        selection_high = ~beh.diagnosis & (beh[bdi_col] > higher_threshold)
 
     elif method == 'cvsd':
         lower_threshold = 5 if lower_threshold is None else lower_threshold
         higher_threshold = 0 if higher_threshold is None else higher_threshold
 
-        selection_low = ~beh.DIAGNOZA & (beh[bdi_col] <= lower_threshold)
-        selection_high = beh.DIAGNOZA & (beh[bdi_col] > higher_threshold)
+        selection_low = ~beh.diagnosis & (beh[bdi_col] <= lower_threshold)
+        selection_high = beh.diagnosis & (beh[bdi_col] > higher_threshold)
     elif 'reg' in method:
         selected = np.zeros(len(sid), dtype='bool')
         if 'c' in method:
-            selected = ~beh.DIAGNOZA.values
+            selected = ~beh.diagnosis.values
         if 'd' in method:
-            selected = selected | beh.DIAGNOZA.values
+            selected = selected | beh.diagnosis.values
         bdi = beh.loc[selected, bdi_col].values
 
     if 'reg' not in method:
@@ -129,7 +129,7 @@ def group_bdi(subj_id, beh, method='cvsc', lower_threshold=None,
         if method == 'cvsc':
             # we add 'fake' diagnosis grouping variable so that further
             # steps of confound regression analysis of cvsc contrast work well
-            beh.loc[selection_high, 'DIAGNOZA'] = True
+            beh.loc[selection_high, 'diagnosis'] = True
         grouping['beh'] = beh.loc[selected, :]
     return grouping
 
@@ -146,15 +146,16 @@ def _check_threshold(thresh, values, default):
 #       * adding study argument / registering in get_data?
 def recode_variables(beh, use_bdi=False, data=None, interaction=False,
                      warn_prop_missing=0.05):
-    '''Recode and rescale variables in full behavioral dataframes for
+    '''Recode and rescale variables in the full behavioral dataframe for
     regression analyses that take confounds into account.
+
     Scaling continuous variables by 2SDs and leaving dummy variables intact
     has been advocated by Gelman (2008), but specifically in the context of
     interpretting regression coefficients. In our analyses we don't
     interpret the coefficients and often want the intercept to refer to
     the grand mean (not to the mean of a specific group). Therefore we
-    standardize continuous variables (age, education) and center dichotomous/
-    dummy variables (sex, diagnosis).
+    standardize continuous variables (age, education in years) and center dichotomous/
+    dummy variables (sex, diagnosis, ordinal education stages).
 
     Parameters
     ----------
@@ -175,7 +176,7 @@ def recode_variables(beh, use_bdi=False, data=None, interaction=False,
         ``'interaction'`` column with gender * diagnosis (or gender * bdi if
         ``use_bdi`` is ``True``) as data. Defaults to False.
     warn_prop_missing : float
-        Raise a warning higher proportion of rows are removed from the data.
+        Raise a warning if higher proportion of rows are removed from the data.
 
     Returns
     -------
@@ -187,13 +188,13 @@ def recode_variables(beh, use_bdi=False, data=None, interaction=False,
     '''
     from scipy.stats import zscore
 
-    sel_cols = ['sex', 'age', 'education']
+    sel_cols = ['gender', 'age', 'education']
     if use_bdi:
         bdi_col = [col for col in ['BDI-I', 'BDI-II', 'PHQ-9']
                    if col in beh.columns][0]
         sel_cols.append(bdi_col)
     else:
-        sel_cols.append('DIAGNOZA')
+        sel_cols.append('diagnosis')
 
     beh = beh.copy()
 
@@ -208,6 +209,7 @@ def recode_variables(beh, use_bdi=False, data=None, interaction=False,
     beh = beh.loc[~has_missing, :]
 
     # warn if too many missing
+    # (although this never happened in the 5 datasets used in the paper)
     prop_missing = has_missing.mean()
     if prop_missing > warn_prop_missing:
         from warnings import warn
@@ -220,27 +222,26 @@ def recode_variables(beh, use_bdi=False, data=None, interaction=False,
 
     # center diagnosis
     if not use_bdi:
-        diag = beh.loc[:, 'DIAGNOZA']
-        beh.loc[:, 'DIAGNOZA'] = diag - diag.mean()
+        diag = beh.loc[:, 'diagnosis']
+        beh.loc[:, 'diagnosis'] = diag - diag.mean()
 
     # standardize age and education
     beh.loc[:, 'age'] = zscore(beh.loc[:, 'age'])
     if 'education' in beh.columns:
         if beh.education.dtype == 'O':
-            if (beh.education == 'licencjat').any():
+            if (beh.education == 'vocational').any():
                 # Wronski study, we construct dummy codes for education
-                beh.loc[:, 'lic'] = beh.education == 'licencjat'
-                beh.loc[:, 'mgr'] = ((beh.education == 'magisterskie')
-                                     | (beh.education == 'podyplomowe'))
+                beh.loc[:, 'lic'] = beh.education == 'bachelor'
+                beh.loc[:, 'mgr'] = ((beh.education == 'master')
+                                     | (beh.education == 'postgraduate'))
 
                 beh.loc[:, 'lic'] = beh.loc[:, 'lic'] - beh.loc[:, 'lic'].mean()
                 beh.loc[:, 'mgr'] = beh.loc[:, 'mgr'] - beh.loc[:, 'mgr'].mean()
 
                 sel_cols = sel_cols[:2] + ['lic', 'mgr'] + sel_cols[3:]
-            elif (beh.education == 'Wyższe (licencjat)').any():
+            elif (beh.education == 'student').any():
                 # DiamSar study
-                dummy_vals = ['Wyższe (magister)', 'Wyższe (licencjat)',
-                              'Student']
+                dummy_vals = ['master', 'bachelor', 'student']
                 rename_to = ['mgr', 'lic', 'stu']
                 for val, name in zip(dummy_vals, rename_to):
                     beh.loc[:, name] = beh.education == val
@@ -260,7 +261,7 @@ def recode_variables(beh, use_bdi=False, data=None, interaction=False,
     # create interaction term if needed
     if interaction:
         sel_cols += ['interaction']
-        pred_col = bdi_col if use_bdi else 'DIAGNOZA'
+        pred_col = bdi_col if use_bdi else 'diagnosis'
         beh.loc[:, 'interaction'] = beh.sex * beh[pred_col]
 
     if data is None:

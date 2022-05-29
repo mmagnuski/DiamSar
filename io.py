@@ -55,163 +55,18 @@ def read_bdi(paths, study='C', **kwargs):
         Dataframe with bdi scores and diagnosis status.
     '''
     full_table = kwargs.get('full_table', False)
-    base_dir = paths.get_path('main', study=study)
-    beh_dir = op.join(base_dir, 'beh')
-    if study == 'A':
-        df = pd.read_excel(op.join(beh_dir, 'baza minimal.xlsx'))
-        select_col = ['ID', 'BDI_k', 'DIAGNOZA']
-        rename_col = {'BDI_k': 'BDI-I'}
-
-        if full_table:
-            select_col += ['plec_k', 'wiek']
-            rename_col.update({'plec_k': 'sex', 'wiek': 'age'})
-
-        # select relevant columns
-        bdi = df[select_col]
-        bdi = make_sure_diagnosis_is_boolean(bdi)
-
-        # rename columns
-        bdi = bdi.rename(columns=rename_col)
-
-        if full_table:
-            # ! TODO make sure that sex is coded this way
-            relabel = {1: 'female', 2: 'male'}
-            bdi.loc[:, 'sex'] = bdi.sex.replace(relabel)
-
-    if study == 'B':
-        if full_table:
-            bdi = pd.read_excel(op.join(beh_dir, 'BAZA DANYCH.xlsx'))
-            sel_col = ['nr osoby', 'BDI 2-pomiar wynik', 'wykształcenie',
-                       'wiek', 'płeć']
-            sel_col = [col for col in sel_col if col in bdi.columns]
-            bdi = bdi[sel_col]
-
-            # trim rows
-            idx = np.where(bdi['nr osoby'].isnull())[0][0]
-            bdi = bdi.iloc[:idx, :]
-
-            # rename columns
-            rename_col = {'wiek': 'age', 'płeć': 'sex', 'nr osoby': 'ID',
-                          'BDI 2-pomiar wynik': 'BDI-I',
-                          'wykształcenie': 'education'}
-            bdi = bdi.rename(columns=rename_col)
-
-            # rename sex to female / male
-            bdi.loc[:, 'sex'] = bdi.sex.replace({'k': 'female', 'm': 'male'})
-
-            # missing values should be NaN
-            msk = bdi.loc[:, 'BDI-I'] == 'brak'
-            bdi.loc[msk, 'BDI-I'] = np.nan
-
-            bdi = bdi.infer_objects()
-        else:
-            bdi = pd.read_excel(op.join(beh_dir, 'BDI.xlsx'), header=None,
-                                names=['ID', 'BDI-I'])
-        bdi.loc[:, 'DIAGNOZA'] = False
-
-    if study == 'C':
-        df = pd.read_excel(op.join(beh_dir, 'BAZA_DANYCH.xlsx'))
-        first_null = np.where(df.ID.isnull())[0]
-        if len(first_null) > 0:
-            first_null = first_null[0]
-            df = df.iloc[:first_null, :]
-        if full_table:
-            bdi = study_C_reformat_original_beh_table(df)
-        else:
-            bdi = df[['ID', 'BDI-II', 'DIAGNOZA']]
-
-        bdi = make_sure_diagnosis_is_boolean(bdi)
-
+    if study in list('ABC'):
+        # read in the preprocessed raw data for respective study
+        base_dir = paths.get_path('main', study=study)
+        beh_dir = op.join(base_dir, 'beh')
+        beh = pd.read_csv(op.join(beh_dir, 'beh_preproc.csv'))
+        if not full_table:
+            beh = beh.loc[:, ['ID', 'BDI-I', 'diagnosis']]
     if study == 'D':
-        bdi = pd.read_excel(op.join(beh_dir, 'subject_data.xlsx'))
-        bdi.loc[:, 'DIAGNOZA'] = bdi.MDD <= 2
-        sel_col = ['id', 'DIAGNOZA', 'BDI']
-
-        if full_table:
-            # translate MDD values to more meaningful strings
-            translate = {1: 'present', 2: 'past', 50: 'subclinical', 99: 'no'}
-            bdi.loc[:, 'depression'] = bdi.MDD.replace(translate)
-
-            # translate sex to female/male strings
-            relabel = {1: 'female', 2: 'male'}
-            bdi.loc[:, 'sex'] = bdi.sex.replace(relabel)
-
-            sel_col = sel_col + ['depression', 'sex', 'age']
-
-        bdi = bdi[sel_col]
-        rename_col = {'id': 'ID', 'BDI': 'BDI-II'}
-        bdi = bdi.rename(columns=rename_col)
-
+        beh = prepare_raw_beh_study_IV(paths, full_table=full_table)
     if study == 'E':
-        # original database name is 'subjects_information_EEG_128channels_
-        # resting_lanzhou_2015.xlsx'
-        bdi = pd.read_excel(op.join(beh_dir, 'database_MODMA.xlsx'))
-        bdi.loc[:, 'DIAGNOZA'] = bdi.type == 'MDD'
-        sel_col = ['subject id', 'DIAGNOZA', 'PHQ-9']
-
-        if full_table:
-            sel_col = sel_col + ['sex', 'age', 'education']
-            relabel = {'F': 'female', 'M': 'male'}
-            bdi.loc[:, 'sex'] = bdi.gender.replace(relabel)
-            bdi = bdi.rename(columns={'education（years）': 'education'})
-
-        bdi = bdi.loc[:, sel_col]
-        rename_col = {'subject id': 'ID'}
-        bdi = bdi.rename(columns=rename_col)
-
-    return bdi.set_index('ID')
-
-
-def study_C_reformat_original_beh_table(df):
-    '''Select and recode relevant columns from behavioral table.
-    '''
-    # select relevant columns
-    df = df.loc[:, ['ID', 'DATA BADANIA', 'WIEK', 'PŁEĆ', 'WYKSZTAŁCENIE',
-                    'DIAGNOZA', 'BDI-II']]
-
-    # fix dates
-    df.loc[0, 'DATA BADANIA'] = df.loc[1, 'DATA BADANIA']
-    df.loc[7, 'WIEK'] = datetime.datetime(df.loc[7, 'WIEK'], 6, 25)
-    df.loc[21, 'WIEK'] = datetime.datetime(df.loc[21, 'WIEK'], 6, 25)
-
-    # silence false alarm SettingWithCopyWarnings:
-    with warnings.catch_warnings():
-        irritating_warning = pd.core.common.SettingWithCopyWarning
-        warnings.simplefilter('ignore', irritating_warning)
-
-        # age
-        # ---
-        for idx in df.index:
-            delta = relativedelta(df.loc[idx, 'DATA BADANIA'],
-                                  df.loc[idx, 'WIEK'])
-            df.loc[idx, 'age'] = delta.years
-
-        # one bad birth date (the same as study date) - use average
-        # student age (participant was a student)
-        avg_student_age = df.query('WYKSZTAŁCENIE == "Student"').age.mean()
-        df.loc[9, 'age'] = int(avg_student_age)
-
-        # remove 'DATA BADANIA' and 'WIEK'
-        bdi = df.drop(['DATA BADANIA', 'WIEK'], axis='columns')
-
-        # rename columns
-        relabel = {'WYKSZTAŁCENIE': 'education', 'PŁEĆ': 'sex'}
-        bdi = bdi.rename(columns=relabel)
-
-        # translate płeć
-        relabel = {'KOBIETA': 'female', 'MĘŻCZYZNA': 'male'}
-        bdi.loc[:, 'sex'] = bdi.sex.replace(relabel)
-
-    return bdi
-
-
-def make_sure_diagnosis_is_boolean(bdi):
-    # silence false alarm SettingWithCopyWarnings:
-    with warnings.catch_warnings():
-        irritating_warning = pd.core.common.SettingWithCopyWarning
-        warnings.simplefilter('ignore', irritating_warning)
-        bdi.loc[:, 'DIAGNOZA'] = bdi.DIAGNOZA.astype('bool')
-    return bdi
+        beh = prepare_raw_beh_study_V(paths, full_table=full_table)
+    return beh.set_index('ID')
 
 
 def prepare_data(paths, study='C', contrast='cvsd', eyes='closed', space='avg',
@@ -413,7 +268,7 @@ def prepare_data(paths, study='C', contrast='cvsd', eyes='closed', space='avg',
         N_all = bdi.shape[0]
         stat_info['N_all'] = N_all
         if 'reg' not in contrast:
-            N_hi = (bdi['DIAGNOZA'] > 0).sum()
+            N_hi = (bdi['diagnosis'] > 0).sum()
             stat_info['N_high'] = N_hi
             stat_info['N_low'] = N_all - N_hi
         subj_id = bdi.index.values
@@ -644,3 +499,202 @@ def warnings_to_ignore_when_reading_files():
                    "discontinuities. Be cautious of filtering and epoching "
                    "around these events.")]
     return ignore_msg
+
+
+def prepare_raw_beh_study_I(paths):
+    '''Prepare raw behavioral data. Previously the data were prepared at load
+    time. This had to be changed because Dryad does not allow non-engish column
+    names or values.
+    This is how the raw behavioral data were prepared.
+    '''
+    base_dir = paths.get_path('main', study='A')
+    beh_dir = op.join(base_dir, 'beh')
+    df = pd.read_excel(op.join(beh_dir, 'baza minimal.xlsx'))
+
+    # reviously used when full_table=False
+    select_col = ['ID', 'BDI_k', 'DIAGNOZA']
+    rename_col = {'BDI_k': 'BDI-I'}
+
+    # previously used only when full_table=True:
+    select_col += ['plec_k', 'wiek']
+    rename_col.update({'plec_k': 'gender', 'wiek': 'age',
+                        'DIAGNOZA': 'diagnosis'})
+
+    # select relevant columns
+    df = df[select_col]
+    df = make_sure_diagnosis_is_boolean(df)
+
+    # rename columns
+    df = df.rename(columns=rename_col)
+
+    # relabel gender
+    relabel = {1: 'female', 2: 'male'}
+    df.loc[:, 'gender'] = df.gender.replace(relabel)
+
+    return df
+
+
+# TODO: make sure full_table=False is a subset of full_table=True
+def prepare_raw_beh_study_II(paths, full_table=False):
+    base_dir = paths.get_path('main', study='B')
+    beh_dir = op.join(base_dir, 'beh')
+
+    if full_table:
+        bdi = pd.read_excel(op.join(beh_dir, 'BAZA DANYCH.xlsx'))
+        sel_col = ['nr osoby', 'BDI 2-pomiar wynik', 'wykształcenie',
+                   'wiek', 'płeć']
+        sel_col = [col for col in sel_col if col in bdi.columns]
+        bdi = bdi[sel_col]
+
+        # trim rows
+        idx = np.where(bdi['nr osoby'].isnull())[0]
+        if len(idx) > 0:
+            bdi = bdi.iloc[:idx, :]
+
+        # rename columns
+        rename_col = {'wiek': 'age', 'płeć': 'gender', 'nr osoby': 'ID',
+                      'BDI 2-pomiar wynik': 'BDI-I',
+                      'wykształcenie': 'education'}
+        bdi = bdi.rename(columns=rename_col)
+
+        # rename gender to female / male
+        bdi.loc[:, 'gender'] = bdi.gender.replace({'k': 'female', 'm': 'male'})
+
+        # missing values should be NaN
+        msk = bdi.loc[:, 'BDI-I'] == 'brak'
+        bdi.loc[msk, 'BDI-I'] = np.nan
+
+        # translate education for Dryad
+        education_translation = {
+            'srednie': 'secondary', 'licencjat': 'bachelor',
+            'magisterskie': 'master', 'maturalne': 'matura',
+            'podyplomowe': 'postgraduate', 'zawodowe': 'vocational'}
+        bdi.education = bdi.education.replace(education_translation)
+
+        bdi = bdi.infer_objects()
+    else:
+        bdi = pd.read_excel(op.join(beh_dir, 'BDI.xlsx'), header=None,
+                            names=['ID', 'BDI-I'])
+    bdi.loc[:, 'diagnosis'] = False
+    return bdi
+
+
+def prepare_raw_beh_study_III(paths, full_table=False):
+    base_dir = paths.get_path('main', study='C')
+    beh_dir = op.join(base_dir, 'beh')
+
+    df = pd.read_excel(op.join(beh_dir, 'BAZA_DANYCH.xlsx'))
+    first_null = np.where(df.ID.isnull())[0]
+    if len(first_null) > 0:
+        first_null = first_null[0]
+        df = df.iloc[:first_null, :]
+    if full_table:
+        df = study_C_reformat_original_beh_table(df)
+    else:
+        df = df[['ID', 'BDI-II', 'DIAGNOZA']]
+
+    df = make_sure_diagnosis_is_boolean(df)
+    return df
+
+
+def study_C_reformat_original_beh_table(df):
+    '''Select and recode relevant columns from behavioral table.'''
+    # select relevant columns
+    df = df.loc[:, ['ID', 'DATA BADANIA', 'WIEK', 'PŁEĆ', 'WYKSZTAŁCENIE',
+                    'DIAGNOZA', 'BDI-II']]
+
+    # fix dates
+    df.loc[0, 'DATA BADANIA'] = df.loc[1, 'DATA BADANIA']
+    df.loc[7, 'WIEK'] = datetime.datetime(df.loc[7, 'WIEK'], 6, 25)
+    df.loc[21, 'WIEK'] = datetime.datetime(df.loc[21, 'WIEK'], 6, 25)
+
+    # silence false alarm SettingWithCopyWarnings:
+    with warnings.catch_warnings():
+        irritating_warning = pd.core.common.SettingWithCopyWarning
+        warnings.simplefilter('ignore', irritating_warning)
+
+        # age
+        # ---
+        for idx in df.index:
+            delta = relativedelta(df.loc[idx, 'DATA BADANIA'],
+                                  df.loc[idx, 'WIEK'])
+            df.loc[idx, 'age'] = delta.years
+
+        # one bad birth date (the same as study date) - use average
+        # student age (participant was a student)
+        avg_student_age = df.query('WYKSZTAŁCENIE == "Student"').age.mean()
+        df.loc[9, 'age'] = int(avg_student_age)
+
+        # remove 'DATA BADANIA' and 'WIEK'
+        bdi = df.drop(['DATA BADANIA', 'WIEK'], axis='columns')
+
+        # rename columns
+        relabel = {'WYKSZTAŁCENIE': 'education', 'PŁEĆ': 'gender',
+                   'DIAGNOZA': 'diagnosis'}
+        bdi = bdi.rename(columns=relabel)
+
+        # translate płeć
+        relabel = {'KOBIETA': 'female', 'MĘŻCZYZNA': 'male'}
+        bdi.loc[:, 'gender'] = bdi.gender.replace(relabel)
+
+        # translate education for Dryad
+        education_translation = {
+            'Wyższe (magister)': 'master', 'Średnie': 'secondary',
+            'Wyższe (licencjat)': 'bachelor', 'Student': 'student'}
+        bdi.education = bdi.education.replace(education_translation)
+
+    return bdi
+
+
+def prepare_raw_beh_study_IV(paths, full_table=False):
+    base_dir = paths.get_path('main', study='D')
+    beh_dir = op.join(base_dir, 'beh')
+    bdi = pd.read_excel(op.join(beh_dir, 'subject_data.xlsx'))
+
+    bdi.loc[:, 'diagnosis'] = bdi.MDD <= 2
+    sel_col = ['id', 'diagnosis', 'BDI']
+
+    if full_table:
+        # translate MDD values to more meaningful strings
+        translate = {1: 'present', 2: 'past', 50: 'subclinical', 99: 'no'}
+        bdi.loc[:, 'depression'] = bdi.MDD.replace(translate)
+
+        # translate gender to female/male strings
+        relabel = {1: 'female', 2: 'male'}
+        bdi.loc[:, 'gender'] = bdi.gender.replace(relabel)
+
+        sel_col = sel_col + ['depression', 'gender', 'age']
+
+    bdi = bdi[sel_col]
+    rename_col = {'id': 'ID', 'BDI': 'BDI-II'}
+    bdi = bdi.rename(columns=rename_col)
+    return bdi
+
+
+def prepare_raw_beh_study_V(paths, full_table=False):
+    # original database name is 'subjects_information_EEG_128channels_
+    # resting_lanzhou_2015.xlsx'
+    bdi = pd.read_excel(op.join(beh_dir, 'database_MODMA.xlsx'))
+    bdi.loc[:, 'DIAGNOZA'] = bdi.type == 'MDD'
+    sel_col = ['subject id', 'DIAGNOZA', 'PHQ-9']
+
+    if full_table:
+        sel_col = sel_col + ['sex', 'age', 'education']
+        relabel = {'F': 'female', 'M': 'male'}
+        bdi.loc[:, 'sex'] = bdi.gender.replace(relabel)
+        bdi = bdi.rename(columns={'education（years）': 'education'})
+
+    bdi = bdi.loc[:, sel_col]
+    rename_col = {'subject id': 'ID'}
+    bdi = bdi.rename(columns=rename_col)
+    return bdi
+
+
+def make_sure_diagnosis_is_boolean(bdi):
+    # silence false alarm SettingWithCopyWarnings:
+    with warnings.catch_warnings():
+        irritating_warning = pd.core.common.SettingWithCopyWarning
+        warnings.simplefilter('ignore', irritating_warning)
+        diag_col = 'DIAGNOZA' if 'DIAGNOZA' in bdi.columns else 'diagnosis'
+        bdi.loc[:, diag_col] = bdi.loc[:, diag_col].astype('bool')
+    return bdi
