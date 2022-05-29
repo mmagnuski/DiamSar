@@ -570,6 +570,20 @@ def list_analyses(study=list('ABCDE'), contrast=['cvsc', 'cvsd', 'creg',
     each of the arguments - where each element of the list is one analysis
     option that should be combined with all the other options.
 
+    Parameters
+    ----------
+    reduce_analyses : bool
+      Whether to reduce the analyses the same way as in the "No
+      relationship between frontal alpha asymmetry and depressive disorders
+      in a multiverse analysis of five studies". The reduction rules were:
+      * exclude analyses where frequency other than 8 - 13 Hz is not
+        averaged (frequency by fequency analyses were done only in one
+        special case)
+      * exclude analyses where asymmetry channel pairs are used and
+        frequency range is not averaged
+      * exclude analyses where 'all' or 'frontal' channel selection
+        was used and frequency range is not averaged
+
     Returns
     -------
     good_analyses : list of tuples
@@ -624,8 +638,9 @@ def list_analyses(study=list('ABCDE'), contrast=['cvsc', 'cvsd', 'creg',
                               conf))
 
     if verbose:
-        reduced = len(good_analyses)
-        print('Number of reduced combinations: {:d}'.format(reduced))
+        num_comb = len(good_analyses)
+        addstr = ' reduced' if reduce_analyses else ''
+        print(f'Number of{addstr} analysis combinations: {num_comb:d}')
 
     return good_analyses
 
