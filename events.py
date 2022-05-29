@@ -55,9 +55,9 @@ def translate_events_D(events):
 
     # join the new annotations with boundary events
     events_new = np.stack(onset_events, axis=0)
-    where_bounaries = events[:, -1] == 999
-    if where_bounaries.any():
-        events_old = events[where_bounaries, :]
+    where_boundaries = events[:, -1] == 999
+    if where_boundaries.any():
+        events_old = events[where_boundaries, :]
         events = np.concatenate([events_new, events_old], axis=0)
     else:
         events = events_new
@@ -141,7 +141,7 @@ def translate_events_sternberg(events):
 
     # FIX/CHECK
     # min_ind i linijki poniżej są do upewnienia się, że wszystko jest ok
-    # czasami po prostu brakuje kilku eventów na końcu - będę to musiał jeszcze
+    # czasami po prostu brakuje kilku event'ów na końcu - będę to musiał jeszcze
     # sprawdzić - a tutaj dodam pewnie Warning
     n_fix_maint = np.sum(is_maintenance_fix)
     n_fix_start = np.sum(~is_maintenance_fix)
