@@ -11,8 +11,10 @@ def get_task_event_id(raw, event_id, study='C', task='rest'):
         are checked.
     event_id : dict
         Starting event_id dictionary that is filled with additional entries.
-    study : FILLME
-    task : FILLME
+    study : str
+        Study name. Defaults to ``'C'``.
+    task : str
+        Task name. Defaults to ``'rest'``.
     '''
     if task == 'rest':
         if study == 'C':
@@ -108,11 +110,23 @@ def translate_events_sternberg(events):
     '''Translate sternberg events to include information about load.
 
     Information about load can be now obtained from fixation event value by
-    subtracting 100. For example fixation event `150` denotes fixation that
-    starts maintenance period with 5 elements held in memory.
-    Iformation about load can also be obtained from probe event value using
-    the following formula: `int((probe_event - 1) / 10) + 1`.
+    subtracting 100 and dividing by 10. For example fixation event `150`
+    denotes fixation that starts maintenance period with 5 elements held in
+    memory. Information about load can also be obtained from probe event value
+    using the following formula: `int(probe_event / 10)`.
 
+    Parameters
+    ----------
+    events : numpy 2d array
+        Events array in mne-python convention.
+
+    Returns
+    -------
+    events : numpy 2d array
+        Translated events array.
+
+    Notes
+    -----
     This function is not used in "Three times NO" paper.
     '''
     is_probe = (events[:, -1] > 10) & (events[:, -1] < 21)

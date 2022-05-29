@@ -22,7 +22,8 @@ from borsar.cluster import construct_adjacency_matrix
 # FIXME - use in register mode (CHECK - did I mean .get_data(),
 #                               is it already done?)
 def read_bdi(paths, study='C', **kwargs):
-    '''Read BDI scores and diagnosis status.
+    '''Read BDI scores and diagnosis status. Can also read other, confounding
+    variables, when passing ``full_table=True``.
 
     Parameters
     ----------
@@ -45,7 +46,7 @@ def read_bdi(paths, study='C', **kwargs):
 
         Study ``'C'`` is used by default.
     full_table : bool
-        Whether to read full table, containing for example age and sex.
+        Whether to read full table, containing for example age and gender.
         This option is not used in "Three times NO" paper.
 
     Returns
