@@ -139,8 +139,8 @@ def read_raw(fname, study='C', task='rest', space='avg'):
 
     # task specific event modification - add load info to events
     if task == 'sternberg':
-        from DiamSar.events import change_events_sternberg
-        events = change_events_sternberg(events)
+        from DiamSar.events import translate_events_sternberg
+        events = translate_events_sternberg(events)
 
     # channel position, reference scheme
     # ----------------------------------
