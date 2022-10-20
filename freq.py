@@ -350,12 +350,13 @@ def make_csd_morlet_raw(raw, freqs, events=None, event_id=None, tmin=0.,
     all_weights = list()
     csds = list()
 
+    first_samp = raw.first_samp
     window_len = np.round(1 / freqs * n_cycles * sfreq / 2).astype('int')
     add_rim = np.max(window_len)
 
     for event_idx in range(events.shape[0]):
-        tmin_ts = events[event_idx, 0] + int(round(tmin * sfreq))
-        tmax_ts = events[event_idx, 0] + int(round(tmax * sfreq))
+        tmin_ts = events[event_idx, 0] + int(round(tmin * sfreq)) - first_samp
+        tmax_ts = events[event_idx, 0] + int(round(tmax * sfreq)) - first_samp
 
         # FIXME - make sure tfr here is complex
         start, end = tmin_ts - add_rim, tmax_ts + add_rim
@@ -368,7 +369,7 @@ def make_csd_morlet_raw(raw, freqs, events=None, event_id=None, tmin=0.,
 
         # FIXME - check that weights make sense
         wgt = _apply_annot_to_tfr(raw.annotations, tfr, sfreq / decim, freqs,
-                                  n_cycles, orig_sample=tmin_ts)
+                                  n_cycles, orig_sample=tmin_ts + first_samp)
         reduction = np.mean if wgt == 0. else np.nanmean
         all_weights.append(wgt)
 
