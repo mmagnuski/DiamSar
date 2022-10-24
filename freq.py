@@ -352,7 +352,9 @@ def make_csd_morlet_raw(raw, freqs, events=None, event_id=None, tmin=0.,
 
     first_samp = raw.first_samp
     window_len = np.round(1 / freqs * n_cycles * sfreq / 2).astype('int')
-    add_rim = np.max(window_len)
+    add_rim = int(np.max(window_len) / 2)
+    add_rim_post_decim = int(add_rim / decim)
+    sfreq_post_decim = sfreq / decim
 
     for event_idx in range(events.shape[0]):
         tmin_ts = events[event_idx, 0] + int(round(tmin * sfreq)) - first_samp
@@ -365,11 +367,12 @@ def make_csd_morlet_raw(raw, freqs, events=None, event_id=None, tmin=0.,
             data, sfreq, freqs, n_cycles=n_cycles, decim=decim)
 
         n_times = tfr.shape[-1]
-        tfr = tfr[0, ..., add_rim:n_times-add_rim]
+        tfr = tfr[0, ..., add_rim_post_decim:n_times-add_rim_post_decim]
 
         # FIXME - check that weights make sense
-        wgt = _apply_annot_to_tfr(raw.annotations, tfr, sfreq / decim, freqs,
-                                  n_cycles, orig_sample=tmin_ts + first_samp)
+        wgt = _apply_annot_to_tfr(
+            raw.annotations, tfr, sfreq_post_decim, freqs, n_cycles,
+            orig_sample=int((tmin_ts + first_samp) / decim))
         reduction = np.mean if wgt == 0. else np.nanmean
         all_weights.append(wgt)
 
@@ -379,7 +382,9 @@ def make_csd_morlet_raw(raw, freqs, events=None, event_id=None, tmin=0.,
                          for idx in range(n_channels)])
 
         # Scaling by sampling frequency for compatibility with Matlab
-        csd /= sfreq
+        # (this is copied from mne-python, it makes more sense to scale
+        #  CSD by number of non-NaN samples in the tfr signal...)
+        csd /= sfreq_post_decim
         csds.append(csd)
 
     # weighted average
