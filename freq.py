@@ -8,7 +8,7 @@ from borsar.freq import compute_rest_psd
 
 from . import pth
 from .utils import select_channels_special
-from .utils import progressbar as progbar
+from .utils import progressbar as progress_bar
 
 
 def format_psds(psds, freq, freq_range=(8, 13), average_freq=False,
@@ -27,9 +27,9 @@ def format_psds(psds, freq, freq_range=(8, 13), average_freq=False,
     freq : numpy array of shape (n_freqs,)
         Frequency bins.
     info : mne.Info
-        Info about the ``psds`` spatial dimenstion - if ``psds`` is in channels
+        Info about the ``psds`` spatial dimension - if ``psds`` is in channels
         space. Used for channel selection.
-    freq_range : tuple or listlike with two elements
+    freq_range : tuple or list-like with two elements
         Lower and higher frequency limits.
     average_freq : bool
         Whether to average frequencies.
@@ -51,7 +51,7 @@ def format_psds(psds, freq, freq_range=(8, 13), average_freq=False,
         them. Used for vertex selection and hemisphere morphing (if 'asy' is
         in ``selection``).
     subjects_dir : str, optional
-        FreeSurfer subjects directiory.
+        FreeSurfer subjects directory.
     subject : str, optional
         Selected subject in subjects_dir to use.
 
@@ -108,7 +108,7 @@ def format_psds(psds, freq, freq_range=(8, 13), average_freq=False,
             # SOURCE SPACE
             # ------------
             # we first need to morph one hemisphere into the other to
-            # make sure the vertices in left and right hemisphsers match
+            # make sure the vertices in left and right hemispheres match
             # we use a special version of fsaverage brain model - one that
             # is symmetrical
             src_sym = pth.paths.get_data('src_sym')
@@ -204,7 +204,7 @@ def compute_all_rest(study='C', event_id=None, tmin=1., tmax=60., winlen=2.,
         ('notebook' vs 'text'). Progressbar requires tqdm library to work.
     save_dir : str | None
         Directory to save the psds to. By default study C main directory is
-        used
+        used.
     '''
     from . import read_raw
 
@@ -225,7 +225,7 @@ def compute_all_rest(study='C', event_id=None, tmin=1., tmax=60., winlen=2.,
 
     all_psds = list()
     subj_ids = pth.get_subject_ids(study=study, task='rest')
-    pbar = progbar(progressbar, total=len(subj_ids))
+    pbar = progress_bar(progressbar, total=len(subj_ids))
 
     for idx, subj_id in enumerate(subj_ids):
         print('Subject #{:02d}, ID: {}'.format(idx, subj_id))
@@ -410,9 +410,9 @@ def _apply_annot_to_tfr(annot, tfr, sfreq, freqs, n_cycles, orig_sample=0,
     annot : mne.Annotations
         Annotations to apply to time-frequency data.
     tfr : np.ndarray
-        Numpy array of time-frequncy data.
+        Numpy array of time-frequency data.
     sfreq : float
-        Sampling freuqency.
+        Sampling frequency.
     n_cycles : int
         Extend each annotation by this number of cycles.
     orig_sample : int
@@ -441,11 +441,11 @@ def _apply_annot_to_tfr(annot, tfr, sfreq, freqs, n_cycles, orig_sample=0,
         use_annot_idx = np.where(which_annot)[0]
 
         for idx in use_annot_idx:
-            onst = annot_onset_sm[idx] - tmin_sm
-            ofst = onst + annot_duration_sm[idx] + 1
-            msk1 = onst - window_len
-            msk2 = ofst + window_len
-            n_times_rej += ofst - onst
+            onset = annot_onset_sm[idx] - tmin_sm
+            offset = onset + annot_duration_sm[idx] + 1
+            msk1 = onset - window_len
+            msk2 = offset + window_len
+            n_times_rej += offset - onset
 
             for frq_idx in range(msk1.shape[0]):
                 tfr[..., frq_idx, msk1[frq_idx]:msk2[frq_idx]] = fill_value
