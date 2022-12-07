@@ -7,7 +7,8 @@ import mne
 
 from borsar.csd import current_source_density
 from borsar.channels import get_ch_pos
-from borsar.utils import silent_mne
+from borsar.utils import silent_mne, get_dropped_epochs
+from sarna.utils import fix_channel_pos
 from sarna.events import read_rej
 
 from . import utils, freq, analysis, pth, viz
@@ -176,7 +177,7 @@ def read_raw(fname, study='C', task='rest', space='avg'):
                 rename[ch] = ch2
         raw.rename_channels(rename)
 
-    # rereference to average or apply CSD
+    # re-reference to average or apply CSD
     if space == 'avg':
         raw.set_eeg_reference(verbose=False, projection=False)
     elif space == 'csd':
@@ -184,6 +185,65 @@ def read_raw(fname, study='C', task='rest', space='avg'):
         raw = current_source_density(raw, G, H)
 
     return raw, events
+
+
+def read_sternberg_epochs(subj_id, lowpass=40, tmin=-0.25, tmax=1.5,
+                          maint_ev=270, baseline=(None, 0)):
+    """Create epochs for sternberg task from raw data.
+
+    Parameters
+    ----------
+    subj_id : int or str
+        Subject ID.
+    lowpass : float
+        Lowpass filter frequency.
+    tmin : float
+        Epoch start time.
+    tmax : float
+        Epoch end time.
+    maint_ev : int
+        CHECK / FIX
+    baseline : tuple | None
+        Baseline interval to apply to epochs. If None, no baseline is applied.
+
+    Returns
+    -------
+    epochs : mne.Epochs
+        Epochs object.
+    """
+    warnings.filterwarnings('ignore')
+    files_shifted = [26, 30, 34, 40, 52, 55, 56, 64, 67, 69]
+
+    with silent_mne():
+        raw, events = read_raw(subj_id, task='sternberg')
+        raw.filter(None, lowpass, verbose=False)
+
+    # select non-training maintenance events
+    maint_triggers = [120, 130, 140, 150, 160, 170]
+    is_maint_event = np.in1d(events[:, -1], maint_triggers)
+    maint_events = events[is_maint_event]
+    maint_events_main = maint_events[-maint_ev:]
+    event_id = {'load_{}'.format(str(trig)[-2]): trig for trig in
+                [120, 130, 140, 150, 160, 170]}
+
+    epochs = mne.Epochs(raw, events=maint_events_main, baseline=baseline,
+                        tmin=tmin, tmax=tmax, event_id=event_id, preload=True,
+                        verbose=False)
+    fix_channel_pos(epochs)
+
+    # read behavior and drop trials with dropped epochs
+    beh = read_beh(int(subj_id), task='sternberg')
+
+    # removing additional trial data in comparison to epochs data
+    if maint_ev != 270:
+        beh = beh.drop(maint_ev + 1)
+    dropped_idx = get_dropped_epochs(epochs)
+    assert (len(beh) - len(dropped_idx)) == len(epochs)
+    beh_sel = beh.drop(dropped_idx + 1)  # + 1 because beh indexing labels start at 1
+    with silent_mne():
+        epochs.metadata = beh_sel
+
+    return epochs
 
 
 def read_beh(fname, study='C', task='sternberg'):
