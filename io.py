@@ -60,8 +60,9 @@ def read_bdi(paths, study='C', **kwargs):
         base_dir = paths.get_path('main', study=study)
         beh_dir = op.join(base_dir, 'beh')
         beh = pd.read_csv(op.join(beh_dir, 'beh_preproc.csv'))
+        bdi_column = 'BDI-I' if 'BDI-I' in beh.columns else 'BDI-II'
         if not full_table:
-            beh = beh.loc[:, ['ID', 'BDI-I', 'diagnosis']]
+            beh = beh.loc[:, ['ID', bdi_column, 'diagnosis']]
     if study == 'D':
         beh = prepare_raw_beh_study_IV(paths, full_table=full_table)
     if study == 'E':
