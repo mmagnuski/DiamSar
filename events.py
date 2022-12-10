@@ -1,6 +1,9 @@
 import numpy as np
 
 
+sternberg_ids_shifted = [26, 30, 34, 40, 52, 55, 56, 64, 67, 69]
+
+
 def get_task_event_id(raw, event_id, study='C', task='rest'):
     '''Returns trigger mapping specific to given study and task.
 
@@ -153,23 +156,16 @@ def translate_events_sternberg(events):
             idx += 1
         num_digits.append(n_dig)
 
-    # FIX/CHECK
-    # min_ind i linijki poniżej są do upewnienia się, że wszystko jest ok
-    # czasami po prostu brakuje kilku event'ów na końcu - będę to musiał jeszcze
-    # sprawdzić - a tutaj dodam pewnie Warning
+    # fix missing maintenance fixation and probe event for last trial for
+    # some of the subjects - these events are likely missing due to how some
+    # data files were cropped
     n_fix_maint = np.sum(is_maintenance_fix)
     n_fix_start = np.sum(~is_maintenance_fix)
     equal_len = (n_fix_maint == n_fix_start == len(num_digits))
     if not equal_len:
-        from warnings import warn
-        warn('Something may be wrong with this file - sternberg event'
-             ' structure is perturbed. Number of maintenance fixes: '
-             '{}, number of start fixes: {}, number of digit streams: '
-             '{}.'.format(n_fix_maint, n_fix_start, len(num_digits)))
         min_ind = min(n_fix_maint, n_fix_start, len(num_digits))
-        where_fix = where_fix[:min_ind * 2]
-        is_maintenance_fix = is_maintenance_fix[:min_ind * 2]
         num_digits = num_digits[:min_ind]
+
     num_digits = np.array(num_digits, dtype=new_events.dtype)
 
     # add load info to maintenance fix
@@ -180,6 +176,110 @@ def translate_events_sternberg(events):
                                    new_events[where_probe, -1] - 10)
 
     return new_events
+
+
+def construct_metadata_from_events(events, subj_id=None):
+    # go through events step by step and create rich dataframe representation
+    # of what happens in the experiment
+    import pandas as pd
+
+
+    n_events = events.shape[0]
+    digit_events = events[events[:, -1] < 10, :]
+    n_digits = digit_events.shape[0]
+
+    maint_events_mask = (events[:, -1] >= 120) & (events[:, -1] < 180)
+    n_maint = maint_events_mask.sum()
+
+    common_columns = ['trigger', 'sample']
+    columns_digits = (['trial', 'digit', 'current_load', 'total_load']
+                      + common_columns)
+    columns_maint = ['trial', 'digits', 'load'] + common_columns
+    df_digits = pd.DataFrame(index=np.arange(n_digits), columns=columns_digits)
+    df_maint = pd.DataFrame(index=np.arange(n_maint), columns=columns_maint)
+
+    # df_probes
+    in_sequence = False
+    maintenance = False
+    fixation = False
+    probe = True
+    row_idx = -1
+    trial = -1
+    all_digits = []
+
+    loads = list(range(2, 8))
+    maint_events = np.array([100 + load * 10 for load in loads])
+
+    for event_idx, event in enumerate(events[:, -1]):
+        if event in [999, 111]:
+            # ignore these events
+            continue
+
+        if fixation:
+            if event < 10:
+                in_sequence = True
+                fixation = False
+            else:
+                raise ValueError(f'Unexpected event at position {event_idx}.')
+
+        if probe:
+            if event == 100:
+                probe = False
+                fixation = True
+                trial += 1
+                current_load = 0
+                start_idx = row_idx + 1
+                all_digits = []
+            else:
+                raise ValueError(f'Unexpected event at position {event_idx}.')
+
+        if maintenance:
+            event_str = str(event)
+            if len(event_str) == 2 and int(event_str[0]) in loads:
+                maintenance = False
+                probe = True
+            else:
+                raise ValueError(f'Unexpected event at position {event_idx}.')
+
+        if in_sequence:
+            if event < 10:
+                current_load += 1
+                row_idx += 1
+                all_digits.append(event)
+
+                df_digits.loc[row_idx, 'trial'] = trial
+                df_digits.loc[row_idx, 'digit'] = event
+                df_digits.loc[row_idx, 'current_load'] = current_load
+                df_digits.loc[row_idx, 'total_load'] = 0  # temporary
+
+                df_digits.loc[row_idx, 'trigger'] = event
+                df_digits.loc[row_idx, 'sample'] = events[event_idx, 0]
+            elif event in maint_events:
+                # maintenance
+                in_sequence = False
+                maintenance = True
+                digits = ' '.join(str(x) for x in all_digits)
+
+                df_maint.loc[trial, 'trial'] = trial
+                df_maint.loc[trial, 'load'] = current_load
+                df_maint.loc[trial, 'digits'] = digits
+
+                df_maint.loc[trial, 'trigger'] = event
+                df_maint.loc[trial, 'sample'] = events[event_idx, 0]
+                df_digits.loc[start_idx:row_idx, 'total_load'] = current_load
+            else:
+                if event == 100 and event_idx + 1 == n_events:
+                    if subj_id is not None:
+                        assert subj_id in sternberg_ids_shifted
+                    else:
+                        print(f'File does not have last maintenance event.')
+                        print(f'This is likely due to how some of the files'
+                              f' were cropped.')
+                else:
+                    raise ValueError(f'Unexpected event at position {event_idx}.')
+
+    assert(df_digits.shape[0] == digit_events.shape[0])
+    return df_digits, df_maint
 
 
 def get_probe_events(events):
