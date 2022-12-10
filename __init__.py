@@ -187,14 +187,17 @@ def read_raw(fname, study='C', task='rest', space='avg'):
     return raw, events
 
 
-def read_sternberg_epochs(subj_id, lowpass=40, tmin=-0.25, tmax=1.5,
-                          maint_ev=270, baseline=(None, 0)):
+def read_sternberg_epochs(subj_id, kind='maint', lowpass=40, tmin=None,
+                          tmax=None, baseline=(None, 0)):
     """Create epochs for sternberg task from raw data.
 
     Parameters
     ----------
     subj_id : int or str
         Subject ID.
+    kind : str
+        Epoch type. Can be ``'maint'`` for maintenance onset, ``'digit'`` for
+        digit onset, or ``'last digit'`` for onset of last digit in each trial.
     lowpass : float
         Lowpass filter frequency.
     tmin : float
@@ -211,6 +214,18 @@ def read_sternberg_epochs(subj_id, lowpass=40, tmin=-0.25, tmax=1.5,
     epochs : mne.Epochs
         Epochs object.
     """
+    from .events import construct_metadata_from_events
+
+    if kind == 'maint':
+        tmin = -0.25 if tmin is None else tmin
+        tmax = 1.5 if tmax is None else tmax
+        event_id = {'load_{}'.format(str(trig)[-2]): trig for trig in
+                    [120, 130, 140, 150, 160, 170]}
+    elif kind in ['digit', 'last digit']:
+        tmin = -0.25 if tmin is None else tmin
+        tmax = 0.5 if tmax is None else tmax
+        event_id = {'digit_{}'.format(trig): trig for trig in range(10)}
+
     warnings.filterwarnings('ignore')
     files_shifted = [26, 30, 34, 40, 52, 55, 56, 64, 67, 69]
 
@@ -219,29 +234,49 @@ def read_sternberg_epochs(subj_id, lowpass=40, tmin=-0.25, tmax=1.5,
         raw.filter(None, lowpass, verbose=False)
 
     # select non-training maintenance events
-    maint_triggers = [120, 130, 140, 150, 160, 170]
-    is_maint_event = np.in1d(events[:, -1], maint_triggers)
-    maint_events = events[is_maint_event]
-    maint_events_main = maint_events[-maint_ev:]
-    event_id = {'load_{}'.format(str(trig)[-2]): trig for trig in
-                [120, 130, 140, 150, 160, 170]}
+    # read behavior and find match with events
+    beh = read_beh(subj_id, task='sternberg')
+    df_digits, df_maint = construct_metadata_from_events(
+        events, subj_id=subj_id
+    )
 
-    epochs = mne.Epochs(raw, events=maint_events_main, baseline=baseline,
+    find_digits = beh.loc[1, 'digits']
+    match_idx = np.where(df_maint.digits.str.fullmatch(find_digits))[0][0]
+
+    if kind == 'maint':
+        msk_maint = df_maint.trial >= match_idx
+        df = df_maint.loc[msk_maint, :]
+    elif kind in ['digit', 'last digit']:
+        msk_digits = df_digits.trial >= match_idx
+        df = df_digits.loc[msk_digits, :]
+
+    df.loc[:, 'trial'] -= match_idx - 1  # -1 for 1-based indexing
+    if kind == 'last digit':
+        msk = df.current_load == df.total_load
+        df = df.loc[msk, :]
+
+    use_events = np.zeros((len(df), 3), dtype=int)
+    use_events[:, 0] = df.loc[:, 'sample'].values
+    use_events[:, 2] = df.loc[:, 'trigger'].values
+
+    # perform epoching
+    epochs = mne.Epochs(raw, events=use_events, baseline=baseline,
                         tmin=tmin, tmax=tmax, event_id=event_id, preload=True,
                         verbose=False)
     fix_channel_pos(epochs)
 
-    # read behavior and drop trials with dropped epochs
-    beh = read_beh(int(subj_id), task='sternberg')
-
+    # drop trials with dropped epochs
     # removing additional trial data in comparison to epochs data
-    if maint_ev != 270:
-        beh = beh.drop(maint_ev + 1)
-    dropped_idx = get_dropped_epochs(epochs)
-    assert (len(beh) - len(dropped_idx)) == len(epochs)
-    beh_sel = beh.drop(dropped_idx + 1)  # + 1 because beh indexing labels start at 1
-    with silent_mne():
-        epochs.metadata = beh_sel
+    if kind in ['maint', 'last digit']:
+        beh = beh.loc[df.trial, :]
+        dropped_idx = get_dropped_epochs(epochs)
+        assert (len(beh) - len(dropped_idx)) == len(epochs)
+        beh_sel = beh.drop(dropped_idx + 1)  # + 1 because beh indexing labels start at 1
+        with silent_mne():
+            epochs.metadata = beh_sel
+
+    # TODO: for every digit epochs, we need to duplicate beh metadata
+    # ...
 
     return epochs
 
