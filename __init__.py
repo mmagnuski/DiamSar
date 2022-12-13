@@ -276,7 +276,7 @@ def read_sternberg_epochs(subj_id, kind='maint', lowpass=40, tmin=None,
             epochs.metadata = beh_sel
 
     # TODO: for every digit epochs, we need to duplicate beh metadata
-    # ...
+    # ... (we can do it by multiplying [idx] and adressing)
 
     return epochs
 

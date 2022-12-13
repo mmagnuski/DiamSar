@@ -106,9 +106,7 @@ def fix_epochs(raw, events, tmin=-0.2, tmax=0.5):
                       event_id=event_id, preload=True)
 
 
-# FIXME
-# - [ ] change/clean up and test the FIX/CHECK part
-# - [ ] add metadata instead of complex event values (!)
+# - [ ] CONSIDER merging with construct_metadata_from_events?
 def translate_events_sternberg(events):
     '''Translate sternberg events to include information about load.
 
