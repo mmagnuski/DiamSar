@@ -204,8 +204,6 @@ def read_sternberg_epochs(subj_id, kind='maint', lowpass=40, tmin=None,
         Epoch start time.
     tmax : float
         Epoch end time.
-    maint_ev : int
-        CHECK / FIX
     baseline : tuple | None
         Baseline interval to apply to epochs. If None, no baseline is applied.
 
@@ -225,9 +223,9 @@ def read_sternberg_epochs(subj_id, kind='maint', lowpass=40, tmin=None,
         tmin = -0.25 if tmin is None else tmin
         tmax = 0.5 if tmax is None else tmax
         event_id = {'digit_{}'.format(trig): trig for trig in range(10)}
-
-    warnings.filterwarnings('ignore')
-    files_shifted = [26, 30, 34, 40, 52, 55, 56, 64, 67, 69]
+    elif kind == 'probe':
+        tmin = -0.25 if tmin is None else tmin
+        tmax = 1.5 if tmax is None else tmax
 
     with silent_mne():
         raw, events = read_raw(subj_id, task='sternberg')
@@ -236,7 +234,7 @@ def read_sternberg_epochs(subj_id, kind='maint', lowpass=40, tmin=None,
     # select non-training maintenance events
     # read behavior and find match with events
     beh = read_beh(subj_id, task='sternberg')
-    df_digits, df_maint = construct_metadata_from_events(
+    df_digits, df_maint, df_probe = construct_metadata_from_events(
         events, subj_id=subj_id
     )
 
@@ -249,6 +247,9 @@ def read_sternberg_epochs(subj_id, kind='maint', lowpass=40, tmin=None,
     elif kind in ['digit', 'last digit']:
         msk_digits = df_digits.trial >= match_idx
         df = df_digits.loc[msk_digits, :]
+    elif kind == 'probe':
+        msk_probe = df_probe.trial >= match_idx
+        df = df_probe.loc[msk_probe, :]
 
     df.loc[:, 'trial'] -= match_idx - 1  # -1 for 1-based indexing
     if kind == 'last digit':
@@ -259,24 +260,41 @@ def read_sternberg_epochs(subj_id, kind='maint', lowpass=40, tmin=None,
     use_events[:, 0] = df.loc[:, 'sample'].values
     use_events[:, 2] = df.loc[:, 'trigger'].values
 
+    if kind == 'probe':
+        event_id = {'probe_{}_load_{}'.format(*list(str(trig))[::-1]): trig
+                    for trig in np.unique(use_events[:, 2])}
+
     # perform epoching
-    epochs = mne.Epochs(raw, events=use_events, baseline=baseline,
-                        tmin=tmin, tmax=tmax, event_id=event_id, preload=True,
-                        verbose=False)
-    fix_channel_pos(epochs)
+    with silent_mne():
+        epochs = mne.Epochs(raw, events=use_events, baseline=baseline,
+                            tmin=tmin, tmax=tmax, event_id=event_id,
+                            preload=True, verbose=False)
+        fix_channel_pos(epochs)
 
     # drop trials with dropped epochs
     # removing additional trial data in comparison to epochs data
-    if kind in ['maint', 'last digit']:
-        beh = beh.loc[df.trial, :]
-        dropped_idx = get_dropped_epochs(epochs)
-        assert (len(beh) - len(dropped_idx)) == len(epochs)
-        beh_sel = beh.drop(dropped_idx + 1)  # + 1 because beh indexing labels start at 1
-        with silent_mne():
-            epochs.metadata = beh_sel
+    beh = beh.loc[df.trial, :]
+    dropped_idx = get_dropped_epochs(epochs)
+    assert (len(beh) - len(dropped_idx)) == len(epochs)
 
-    # TODO: for every digit epochs, we need to duplicate beh metadata
-    # ... (we can do it by multiplying [idx] and adressing)
+    if kind in ['maint', 'probe', 'last digit']:
+        beh_sel = beh.drop(dropped_idx + 1)  # + 1 because beh indexing labels start at 1
+    else:  # multiple digits
+        beh = beh.reset_index()
+        df = df.reset_index()
+        assert (df.total_load == beh.load).all()
+        for col in ['digit', 'current_load']:
+            beh.loc[:, col] = df.loc[:, col].astype(int)
+        beh_sel = beh.drop(dropped_idx)
+
+    # final cleanup of beh tables:
+    with silent_mne(full_silence=True):
+        one_frame = 1 / 60
+        beh_sel.loc[:, 'waitTime'] = beh_sel.loc[:, 'waitTime'] * one_frame
+        beh_sel.loc[:, 'fixTime'] = beh_sel.loc[:, 'fixTime'] * one_frame
+
+    with silent_mne():
+        epochs.metadata = beh_sel
 
     return epochs
 

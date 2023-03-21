@@ -193,8 +193,11 @@ def construct_metadata_from_events(events, subj_id=None):
     columns_digits = (['trial', 'digit', 'current_load', 'total_load']
                       + common_columns)
     columns_maint = ['trial', 'digits', 'load'] + common_columns
+    columns_probe = (['trial', 'digits', 'load', 'probe', 'probe_in']
+                     + common_columns)
     df_digits = pd.DataFrame(index=np.arange(n_digits), columns=columns_digits)
     df_maint = pd.DataFrame(index=np.arange(n_maint), columns=columns_maint)
+    df_probe = pd.DataFrame(index=np.arange(n_maint), columns=columns_probe)
 
     # df_probes
     in_sequence = False
@@ -236,6 +239,22 @@ def construct_metadata_from_events(events, subj_id=None):
             if len(event_str) == 2 and int(event_str[0]) in loads:
                 maintenance = False
                 probe = True
+
+                # fill probe df
+                # -------------
+                assert len(event_str) == 2
+                current_load_probe = int(event_str[0])
+                probe_value = int(event_str[1])
+                assert current_load_probe == current_load
+
+                df_probe.loc[trial, 'trial'] = trial
+                df_probe.loc[trial, 'load'] = current_load
+                df_probe.loc[trial, 'digits'] = digits
+                df_probe.loc[trial, 'probe'] = probe_value
+                df_probe.loc[trial, 'probe_in'] = probe_value in all_digits
+
+                df_probe.loc[trial, 'trigger'] = event
+                df_probe.loc[trial, 'sample'] = events[event_idx, 0]
             else:
                 raise ValueError(f'Unexpected event at position {event_idx}.')
 
@@ -243,8 +262,10 @@ def construct_metadata_from_events(events, subj_id=None):
             if event < 10:
                 current_load += 1
                 row_idx += 1
-                all_digits.append(event)
 
+                # fill digits df
+                # --------------
+                all_digits.append(event)
                 df_digits.loc[row_idx, 'trial'] = trial
                 df_digits.loc[row_idx, 'digit'] = event
                 df_digits.loc[row_idx, 'current_load'] = current_load
@@ -252,12 +273,27 @@ def construct_metadata_from_events(events, subj_id=None):
 
                 df_digits.loc[row_idx, 'trigger'] = event
                 df_digits.loc[row_idx, 'sample'] = events[event_idx, 0]
-            elif event in maint_events:
+            else:
+                if not event in maint_events:
+                    if event == 100 and event_idx + 1 == n_events:
+                        if subj_id is not None:
+                            assert subj_id in sternberg_ids_shifted
+                        else:
+                            print('File does not have last maintenance '
+                                  'event.')
+                            print('This is likely due to how some of the '
+                                  'files were cropped.')
+                    else:
+                        raise ValueError(
+                            f'Unexpected event at position {event_idx}.')
+
                 # maintenance
                 in_sequence = False
                 maintenance = True
-                digits = ' '.join(str(x) for x in all_digits)
 
+                # fill maintenance df
+                # -------------------
+                digits = ' '.join(str(x) for x in all_digits)
                 df_maint.loc[trial, 'trial'] = trial
                 df_maint.loc[trial, 'load'] = current_load
                 df_maint.loc[trial, 'digits'] = digits
@@ -265,19 +301,9 @@ def construct_metadata_from_events(events, subj_id=None):
                 df_maint.loc[trial, 'trigger'] = event
                 df_maint.loc[trial, 'sample'] = events[event_idx, 0]
                 df_digits.loc[start_idx:row_idx, 'total_load'] = current_load
-            else:
-                if event == 100 and event_idx + 1 == n_events:
-                    if subj_id is not None:
-                        assert subj_id in sternberg_ids_shifted
-                    else:
-                        print(f'File does not have last maintenance event.')
-                        print(f'This is likely due to how some of the files'
-                              f' were cropped.')
-                else:
-                    raise ValueError(f'Unexpected event at position {event_idx}.')
 
     assert(df_digits.shape[0] == digit_events.shape[0])
-    return df_digits, df_maint
+    return df_digits, df_maint, df_probe
 
 
 def get_probe_events(events):
