@@ -286,21 +286,22 @@ def construct_metadata_from_events(events, subj_id=None):
                     else:
                         raise ValueError(
                             f'Unexpected event at position {event_idx}.')
+                else:
+                    # maintenance
+                    in_sequence = False
+                    maintenance = True
 
-                # maintenance
-                in_sequence = False
-                maintenance = True
+                    # fill maintenance df
+                    # -------------------
+                    digits = ' '.join(str(x) for x in all_digits)
+                    df_maint.loc[trial, 'trial'] = trial
+                    df_maint.loc[trial, 'load'] = current_load
+                    df_maint.loc[trial, 'digits'] = digits
 
-                # fill maintenance df
-                # -------------------
-                digits = ' '.join(str(x) for x in all_digits)
-                df_maint.loc[trial, 'trial'] = trial
-                df_maint.loc[trial, 'load'] = current_load
-                df_maint.loc[trial, 'digits'] = digits
-
-                df_maint.loc[trial, 'trigger'] = event
-                df_maint.loc[trial, 'sample'] = events[event_idx, 0]
-                df_digits.loc[start_idx:row_idx, 'total_load'] = current_load
+                    df_maint.loc[trial, 'trigger'] = event
+                    df_maint.loc[trial, 'sample'] = events[event_idx, 0]
+                    df_digits.loc[
+                        start_idx:row_idx, 'total_load'] = current_load
 
     assert(df_digits.shape[0] == digit_events.shape[0])
     return df_digits, df_maint, df_probe
