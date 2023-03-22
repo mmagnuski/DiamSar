@@ -251,7 +251,9 @@ def read_sternberg_epochs(subj_id, kind='maint', lowpass=40, tmin=None,
         msk_probe = df_probe.trial >= match_idx
         df = df_probe.loc[msk_probe, :]
 
-    df.loc[:, 'trial'] -= match_idx - 1  # -1 for 1-based indexing
+    with silent_mne(full_silence=True):
+        df.loc[:, 'trial'] -= match_idx - 1  # -1 for 1-based indexing
+
     if kind == 'last digit':
         msk = df.current_load == df.total_load
         df = df.loc[msk, :]
