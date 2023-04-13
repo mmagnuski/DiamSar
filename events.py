@@ -283,6 +283,9 @@ def construct_metadata_from_events(events, subj_id=None):
                                   'event.')
                             print('This is likely due to how some of the '
                                   'files were cropped.')
+
+                        df_digits.loc[
+                            start_idx:row_idx, 'total_load'] = current_load
                     else:
                         raise ValueError(
                             f'Unexpected event at position {event_idx}.')
