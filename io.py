@@ -3,7 +3,6 @@ import os
 import os.path as op
 import warnings
 import datetime
-from dateutil.relativedelta import relativedelta
 
 import numpy as np
 from scipy import sparse
@@ -600,6 +599,8 @@ def prepare_raw_beh_study_III(paths, full_table=False):
 
 def study_C_reformat_original_beh_table(df):
     '''Select and recode relevant columns from behavioral table.'''
+    from dateutil.relativedelta import relativedelta
+
     # select relevant columns
     df = df.loc[:, ['ID', 'DATA BADANIA', 'WIEK', 'PŁEĆ', 'WYKSZTAŁCENIE',
                     'DIAGNOZA', 'BDI-II']]
