@@ -1,6 +1,6 @@
 import numpy as np
 import pandas as pd
-from sarna.utils import progressbar
+from borsar.utils import progressbar
 
 
 # define DiamSar colors
