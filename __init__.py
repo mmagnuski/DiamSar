@@ -234,9 +234,14 @@ def read_sternberg_epochs(subj_id, kind='maint', lowpass=40, tmin=None,
     # select non-training maintenance events
     # read behavior and find match with events
     beh = read_beh(subj_id, task='sternberg')
+    beh.loc[:, 'trial'] = beh.index
     df_digits, df_maint, df_probe = construct_metadata_from_events(
         events, subj_id=subj_id
     )
+
+    # add previous load info to dataframe
+    last_row = beh.index[-1]
+    beh.loc[2:, 'prev_load'] = beh.loc[:last_row - 1, 'load'].values
 
     find_digits = beh.loc[1, 'digits']
     match_idx = np.where(df_maint.digits.str.fullmatch(find_digits))[0][0]
