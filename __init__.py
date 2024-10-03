@@ -242,6 +242,10 @@ def read_sternberg_epochs(subj_id, kind='maint', lowpass=40, tmin=None,
     # add previous load info to dataframe
     last_row = beh.index[-1]
     beh.loc[2:, 'prev_load'] = beh.loc[:last_row - 1, 'load'].values
+    for n_prev in range(3, 6):
+        beh.loc[:, f'prev_load_{n_prev}'] = (
+            beh.loc[:, 'load'].rolling(n_prev).mean()
+        )
 
     find_digits = beh.loc[1, 'digits']
     match_idx = np.where(df_maint.digits.str.fullmatch(find_digits))[0][0]
