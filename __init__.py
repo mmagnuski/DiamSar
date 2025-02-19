@@ -291,7 +291,7 @@ def read_sternberg_epochs(subj_id, kind='maint', lowpass=40, tmin=None,
     if kind in ['maint', 'probe', 'last digit']:
         beh_sel = beh.drop(dropped_idx + 1)  # + 1 because beh indexing labels start at 1
     else:  # multiple digits
-        beh = beh.reset_index()
+        beh = beh.reset_index(drop=True)
         df = df.reset_index()
         assert (df.total_load == beh.load).all()
         for col in ['digit', 'current_load']:
