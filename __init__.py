@@ -243,8 +243,9 @@ def read_sternberg_epochs(subj_id, kind='maint', lowpass=40, tmin=None,
     last_row = beh.index[-1]
     beh.loc[2:, 'prev_load'] = beh.loc[:last_row - 1, 'load'].values
     for n_prev in range(3, 6):
-        beh.loc[:, f'prev_load_{n_prev}'] = (
-            beh.loc[:, 'load'].rolling(n_prev).mean()
+        rolling = beh.loc[:, 'load'].rolling(n_prev).mean()
+        beh.loc[(n_prev + 1):, f'prev_load_{n_prev}'] = (
+            rolling.values[n_prev - 1:-1]
         )
 
     find_digits = beh.loc[1, 'digits']
